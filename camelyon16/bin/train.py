@@ -16,8 +16,9 @@ from torch import nn
 from tensorboardX import SummaryWriter
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from camelyon16.data.image_producer_bin import ImageDataset
 
-from camelyon16.data.image_producer import ImageDataset
 torch.manual_seed(0)
 torch.cuda.manual_seed_all(0)
 
@@ -27,15 +28,18 @@ parser.add_argument('cnn_path', default=None, metavar='CNN_PATH', type=str,
                     help='Path to the config file in json format')
 parser.add_argument('save_path', default=None, metavar='SAVE_PATH', type=str,
                     help='Path to the saved models')
-parser.add_argument('--num_workers', default=2, type=int, help='number of'
+parser.add_argument('--num_workers', default=0, type=int, help='number of'
                     ' workers for each data loader, default 2.')
-parser.add_argument('--device_ids', default='0', type=str, help='comma'
+parser.add_argument('--device_ids', default='1', type=str, help='comma'
                     ' separated indices of GPU to use, e.g. 0,1 for using GPU_0'
                     ' and GPU_1, default 0.')
-
+parser.add_argument('--resume', default=True, type=bool, help='comma'
+                    ' whether to resume the pretrained weight')
 
 def chose_model(cnn):
-    if cnn['model'] == 'resnet18':
+    if cnn['model'] == 'inception_v3':
+        model = models.inception_v3(pretrained=False, aux_logits=False)
+    elif cnn['model'] == 'resnet18':
         model = models.resnet18(pretrained=False)
     else:
         raise Exception("I have not add any models. ")
@@ -53,9 +57,8 @@ def train_epoch(summary, summary_writer, cnn, model, loss_fn, optimizer,
     time_now = time.time()
     for step in range(steps):
         data_train, target_train = next(dataiter_train)
-        data_train = Variable(data_train.float().cuda(async=True))
-        target_train = Variable(target_train.float().cuda(async=True))
-
+        data_train = Variable(data_train.float().cuda(non_blocking=True))
+        target_train = Variable(target_train.float().cuda(non_blocking=True))
         output = model(data_train)
         output = torch.squeeze(output) # noqa
         loss = loss_fn(output, target_train)
@@ -94,32 +97,33 @@ def valid_epoch(summary, model, loss_fn,
                 dataloader_valid):
     model.eval()
 
-    steps = len(dataloader_valid)
+    steps = len(dataloader_valid) // 10
     batch_size = dataloader_valid.batch_size
     dataiter_valid = iter(dataloader_valid)
 
     loss_sum = 0
     acc_sum = 0
-    for step in range(steps):
-        data_valid, target_valid = next(dataiter_valid)
-        data_valid = Variable(data_valid.float().cuda(async=True), volatile=True)
-        target_valid = Variable(target_valid.float().cuda(async=True))
+    with torch.no_grad():
+        for step in range(steps):
+            data_valid, target_valid = next(dataiter_valid)
+            data_valid = Variable(data_valid.float().cuda(non_blocking=True), volatile=True)
+            target_valid = Variable(target_valid.float().cuda(non_blocking=True))
 
-        output = model(data_valid)
-        output = torch.squeeze(output) # important
-        loss = loss_fn(output, target_valid)
+            output = model(data_valid)
+            output = torch.squeeze(output) # important
+            loss = loss_fn(output, target_valid)
 
-        probs = output.sigmoid()
-        predicts = (probs >= 0.5).type(torch.cuda.FloatTensor)
-        acc_data = (predicts == target_valid).type(
-            torch.cuda.FloatTensor).sum().data * 1.0 / batch_size
-        loss_data = loss.data
+            probs = output.sigmoid()
+            predicts = (probs >= 0.5).type(torch.cuda.FloatTensor)
+            acc_data = (predicts == target_valid).type(
+                torch.cuda.FloatTensor).sum().data * 1.0 / batch_size
+            loss_data = loss.data
 
-        loss_sum += loss_data
-        acc_sum += acc_data
+            loss_sum += loss_data
+            acc_sum += acc_data
 
-    summary['loss'] = loss_sum / steps
-    summary['acc'] = acc_sum / steps
+        summary['loss'] = loss_sum / steps
+        summary['acc'] = acc_sum / steps
 
     return summary
 
@@ -143,6 +147,14 @@ def run(args):
     model = chose_model(cnn)
     fc_features = model.fc.in_features
     model.fc = nn.Linear(fc_features, 1) # 须知
+
+    summary_train = {'epoch': 0, 'step': 0}
+    if args.resume:
+        checkpoint = torch.load(os.path.join(args.save_path, 'train.ckpt'))
+        summary_train = {'epoch': checkpoint['epoch'], 'step': checkpoint['step']}
+        model.load_state_dict(checkpoint['state_dict'])
+    summary_valid = {'loss': float('inf'), 'acc': 0}
+
     model = DataParallel(model, device_ids=None)
     model = model.cuda()
     loss_fn = BCEWithLogitsLoss().cuda()
@@ -166,11 +178,9 @@ def run(args):
                                   batch_size=batch_size_valid,
                                   num_workers=num_workers)
 
-    summary_train = {'epoch': 0, 'step': 0}
-    summary_valid = {'loss': float('inf'), 'acc': 0}
     summary_writer = SummaryWriter(args.save_path)
     loss_valid_best = float('inf')
-    for epoch in range(cnn['epoch']):
+    for epoch in range(cnn['epoch'] - summary_train['epoch']):
         summary_train = train_epoch(summary_train, summary_writer, cnn, model,
                                     loss_fn, optimizer,
                                     dataloader_train)
@@ -210,7 +220,9 @@ def run(args):
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    args = parser.parse_args()
+    args = parser.parse_args([
+        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_bin.json",
+        "/home/ps/hhy/slfcd/save_train/train_bin"])
     run(args)
 
 

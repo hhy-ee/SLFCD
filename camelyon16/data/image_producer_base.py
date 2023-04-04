@@ -40,9 +40,9 @@ class ImageDataset(Dataset):
 
             for root, _, fnames in sorted(os.walk(d)):
                 for fname in sorted(fnames):
-                    if fname.split('_')[-1] == 'seg.png':
-                        label_path = os.path.join(root, fname)
-                        img_path = os.path.join(root, fname.split('_')[0] + '.png')
+                    if 'img' in fname:
+                        img_path = os.path.join(root, fname)
+                        label_path = os.path.join(root, fname.split('_')[0] + '_label.png')
                         item = (img_path, label_path)
                         self._items.append(item)
 

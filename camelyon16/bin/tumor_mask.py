@@ -7,6 +7,7 @@ import numpy as np
 import openslide
 import cv2
 import json
+from PIL import Image
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 
@@ -23,37 +24,45 @@ parser.add_argument('--level', default=6, type=int, help='at which WSI level'
 
 
 def run(args):
+    dir = os.listdir(args.json_path)
+    for file in dir:
+        # get the level * dimensions e.g. tumor0.tif level 6 shape (1589, 7514)
+        slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0] + '.tif'))
+        w, h = slide.level_dimensions[args.level]
+        mask_tumor = np.zeros((h, w)) # the init mask, and all the value is 0
+        if 'tumor' in file or 'test' in file:
+            # get the factor of level * e.g. level 6 is 2^6
+            factor = (slide.level_dimensions[0][0]/w, slide.level_dimensions[0][1]/h)
 
-    # get the level * dimensions e.g. tumor0.tif level 6 shape (1589, 7514)
-    slide = openslide.OpenSlide(args.wsi_path)
-    w, h = slide.level_dimensions[args.level]
-    mask_tumor = np.zeros((h, w)) # the init mask, and all the value is 0
+            with open(os.path.join(args.json_path, file)) as f:
+                dicts = json.load(f)
+            tumor_polygons = dicts['positive']
 
-    # get the factor of level * e.g. level 6 is 2^6
-    factor = slide.level_downsamples[args.level]
+            for tumor_polygon in tumor_polygons:
+                # plot a polygon
+                name = tumor_polygon["name"]
+                vertices = np.array(tumor_polygon["vertices"]) / factor
+                vertices = vertices.astype(np.int32)
 
+                cv2.fillPoly(mask_tumor, [vertices], (255))
 
-    with open(args.json_path) as f:
-        dicts = json.load(f)
-    tumor_polygons = dicts['positive']
-
-    for tumor_polygon in tumor_polygons:
-        # plot a polygon
-        name = tumor_polygon["name"]
-        vertices = np.array(tumor_polygon["vertices"]) / factor
-        vertices = vertices.astype(np.int32)
-
-        cv2.fillPoly(mask_tumor, [vertices], (255))
-
-    mask_tumor = mask_tumor[:] > 127
-    mask_tumor = np.transpose(mask_tumor)
-
-    np.save(args.npy_path, mask_tumor)
+            mask_tumor = mask_tumor[:] > 127
+            mask_tumor = np.transpose(mask_tumor)
+            np.save(os.path.join(args.npy_path, file.split('.')[0] + '.npy'), mask_tumor)
 
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    args = parser.parse_args()
+    args = parser.parse_args([
+        "/media/ps/passport2/hhy/camelyon16/training/tumor",
+        "/media/ps/passport2/hhy/camelyon16/training/annotations/json",
+        "/media/ps/passport2/hhy/camelyon16/training/tumor_mask_l6"])
+    args.level = 6
+
+    # args = parser.parse_args([
+    #     "/media/ps/passport2/hhy/camelyon16/testing/images/",
+    #     "/media/ps/passport2/hhy/camelyon16/testing/annotations/json/",
+    #     "/media/ps/passport2/hhy/camelyon16/testing/tumor_mask/"])
     run(args)
 
 if __name__ == "__main__":

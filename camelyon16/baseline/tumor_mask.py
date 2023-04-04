@@ -8,6 +8,7 @@ import openslide
 import cv2
 import json
 from PIL import Image
+from tqdm import tqdm
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 
@@ -19,22 +20,23 @@ parser.add_argument('json_path', default=None, metavar='JSON_PATH', type=str,
                     help='Path to the JSON file')
 parser.add_argument('npy_path', default=None, metavar='NPY_PATH', type=str,
                     help='Path to the output npy mask file')
-parser.add_argument('--level', default=6, type=int, help='at which WSI level'
-                    ' to obtain the mask, default 6')
+parser.add_argument('--vis_result', default=False, type=bool, help='whether'
+                    ' to show the results')
 
 
 def run(args):
-    dir = os.listdir(args.wsi_path)
-    for file in dir:
+    dir = os.listdir(args.json_path)
+    for file in tqdm(dir, total=len(dir)):
         # get the level * dimensions e.g. tumor0.tif level 6 shape (1589, 7514)
-        slide = openslide.OpenSlide(os.path.join(args.wsi_path, file))
-        w, h = slide.level_dimensions[args.level]
+        slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0] + '.tif'))
+        level = int(args.npy_path.split('l')[-1])
+        w, h = slide.level_dimensions[level]
         mask_tumor = np.zeros((h, w)) # the init mask, and all the value is 0
-        if 'tumor' in file:
+        if 'tumor' in file or 'test' in file:
             # get the factor of level * e.g. level 6 is 2^6
             factor = (slide.level_dimensions[0][0]/w, slide.level_dimensions[0][1]/h)
 
-            with open(os.path.join(args.json_path, file.split('.')[0] + '.json')) as f:
+            with open(os.path.join(args.json_path, file)) as f:
                 dicts = json.load(f)
             tumor_polygons = dicts['positive']
 
@@ -45,30 +47,41 @@ def run(args):
                 vertices = vertices.astype(np.int32)
 
                 cv2.fillPoly(mask_tumor, [vertices], (255))
-            
-        wsi_img = slide.read_region((0, 0),
-                                args.level,
-                                tuple([int(i / 2**args.level) for i in slide.level_dimensions[0]])).convert('RGB')
-        wsi_img = wsi_img.resize(slide.level_dimensions[args.level])
-        wsi_img.save(os.path.join(os.path.join(args.npy_path, 'wsi_image'), file.split('.')[0] + '.png'))
 
-        mask_tumor = mask_tumor[:] > 127
-        mask_tumor = np.transpose(mask_tumor)
-        np.save(os.path.join(args.npy_path, file.split('.')[0] + '.npy'), mask_tumor)
+            # mask_tumor = mask_tumor[:] > 127
+            # mask_tumor = np.transpose(mask_tumor)
+            # np.save(os.path.join(args.npy_path, file.split('.')[0] + '.npy'), mask_tumor)
 
-        mask_img = np.asarray(mask_tumor * 255, dtype=np.uint8)
-        mask_img = cv2.applyColorMap(mask_img, cv2.COLORMAP_JET)
-        mask_img = Image.fromarray(mask_img.transpose((1, 0, 2)))
-        heat_img = Image.blend(wsi_img, mask_img, 0.3)
-        heat_img.save(os.path.join(os.path.join(args.npy_path, 'heat_image'), file.split('.')[0] + '.png'))
+            size = tuple([int(i / 2**level) for i in slide.level_dimensions[0]])
+            mask_tumor = cv2.resize(mask_tumor.astype(np.uint8), size, interpolation=cv2.INTER_CUBIC)
+            mask_tumor = np.transpose(mask_tumor)
+            tumor_mask_img_full = np.zeros(slide.level_dimensions[level])
+            tumor_mask_img_full[0: size[0], 0: size[1]] = mask_tumor
+            tumor_mask_img_full = tumor_mask_img_full[:] > 127
+            np.save(os.path.join(args.npy_path, file.split('.')[0] + '.npy'), tumor_mask_img_full)
+
+            if args.vis_result:
+                img_tumor = slide.read_region((0, 0), level,
+                                    tuple([int(i / 2**level) for i in slide.level_dimensions[0]])).convert('RGB')
+                img_tumor = img_tumor.resize(slide.level_dimensions[level])
+                mask_tumor = cv2.applyColorMap((mask_tumor * 255).astype(np.uint8), cv2.COLORMAP_JET)
+                mask_tumor = Image.fromarray(cv2.cvtColor(mask_tumor, cv2.COLOR_BGR2RGB).transpose((1,0,2)))
+                heat_img = Image.blend(img_tumor, mask_tumor, 0.3)
+                heat_img.save(os.path.join(os.path.join(args.npy_path, 'result'), file.split('.')[0] + '.png'))
 
 def main():
     logging.basicConfig(level=logging.INFO)
 
     args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/training/tumor",
-        "/media/ps/passport2/hhy/camelyon16/training/annotations/json",
-        "/media/ps/passport2/hhy/camelyon16/training/tumor_mask_l61"])
+        "/media/ps/passport2/hhy/camelyon16/train/tumor",
+        "/media/ps/passport2/hhy/camelyon16/train/annotations/json",
+        "/media/ps/passport2/hhy/camelyon16/train/tumor_mask_l2"])
+    args.vis_result = False
+
+    # args = parser.parse_args([
+    #     "/media/ps/passport2/hhy/camelyon16/testing/images/",
+    #     "/media/ps/passport2/hhy/camelyon16/testing/annotations/json/",
+    #     "/media/ps/passport2/hhy/camelyon16/testing/tumor_mask/"])
     run(args)
 
 if __name__ == "__main__":

@@ -3,27 +3,29 @@ import os
 import argparse
 import logging
 import time
+import json
+import cv2
+import openslide
 import numpy as np
+
+from tqdm import tqdm
 from shutil import copyfile
 from PIL import Image
 from multiprocessing import Pool, Value, Lock
 
-import openslide
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 
 
 parser = argparse.ArgumentParser(description='Generate patches from a given '
                                  'list of coordinates')
-parser.add_argument('tumor_path', default=None, metavar='IMG_PATH', type=str,
-                    help='Path to the input directory of tumor files')
+parser.add_argument('wsi_path', default=None, metavar='IMG_PATH', type=str,
+                    help='Path to the input directory of tif files')
 parser.add_argument('coords_path', default=None, metavar='COORDS_PATH',
                     type=str, help='Path to the input list of coordinates')
 parser.add_argument('patch_path', default=None, metavar='PATCH_PATH', type=str,
                     help='Path to the output directory of patch images')
 parser.add_argument('--patch_size', default=256, type=int, help='patch size, '
                     'default 768')
-parser.add_argument('--level', default=0, type=int, help='level for WSI, to '
-                    'generate patches, default 0')
 parser.add_argument('--num_process', default=1, type=int,
                     help='number of mutli-process, default 5')
 
@@ -31,25 +33,38 @@ count = Value('i', 0)
 lock = Lock()
 
 
-def process(opts):
-    i, pid, x_center, y_center, label, args = opts
-    x = int(int(x_center) - args.patch_size / 2)
-    y = int(int(y_center) - args.patch_size / 2)
-    wsi_img = Image.open(os.path.join(os.path.join(args.tumor_path, 'wsi_image'), pid + '.png'))
-    
-    img_patch = wsi_img.crop((x, y, x + args.patch_size, y + args.patch_size))
-    img_patch.save(os.path.join(os.path.join(args.patch_path, pid), str(i) + '.png'))
+def process(opts, slide, level, tumor_mask=None):
+    i, pid, x_center, y_center, args = opts
 
-    # tumor_mask = np.load(os.path.join(args.tumor_path, pid + '.npy'))
-    # segmentation = np.zeros((args.patch_size, args.patch_size)) > 127
-    # w, h = tumor_mask.shape
-    # segmentation[: w - x, : h - y] = 
-    # np.save(os.path.join(os.path.join(args.patch_path, pid), str(i) + '.npy'), segmentation)
+    x_scale = int(x_center) * slide.level_dimensions[0][0] / 2**level / slide.level_dimensions[level][0]
+    y_scale = int(y_center) * slide.level_dimensions[0][1] / 2**level / slide.level_dimensions[level][1]
 
-    tumor_mask = Image.fromarray(np.load(os.path.join(args.tumor_path, pid + '.npy')).transpose())
-    segmentation = tumor_mask.crop((x, y, x + args.patch_size, y + args.patch_size))
-    segmentation.save(os.path.join(os.path.join(args.patch_path, pid), str(i) + '_seg.png'))
-    
+    x = int(x_scale - args.patch_size / 2)
+    y = int(y_scale - args.patch_size / 2)
+
+    x_crop = int(x * slide.level_downsamples[level])
+    y_crop = int(y * slide.level_downsamples[level])
+
+    # generate wsi image patch
+    img_patch = slide.read_region((x_crop, y_crop), level,
+                                    (args.patch_size, args.patch_size)).convert('RGB')
+    img_patch.save(os.path.join(os.path.join(args.patch_path, pid), str(i) + '_img.png'))
+
+    # generate tumor label
+    if 'tumor' in pid:
+        mask_tumor = tumor_mask.crop((x, y, x + args.patch_size, y + args.patch_size))
+        mask_tumor.save(os.path.join(os.path.join(args.patch_path, pid), str(i) + '_label.png'))
+    else:
+        mask_tumor = Image.fromarray(np.zeros((args.patch_size, args.patch_size)) > 127)
+        mask_tumor.save(os.path.join(os.path.join(args.patch_path, pid), str(i) + '_label.png'))
+
+    # # generate heat map
+    # mask_tumor = (np.asarray(mask_tumor) * 255).astype(np.uint8)
+    # mask_tumor = cv2.applyColorMap(mask_tumor, cv2.COLORMAP_JET)
+    # mask_tumor = Image.fromarray(cv2.cvtColor(mask_tumor, cv2.COLOR_BGR2RGB))
+    # heat_img = Image.blend(img_patch, mask_tumor, 0.3)
+    # heat_img.save(os.path.join(os.path.join(args.patch_path, pid), str(i) + '_heatmap.png'))
+
     global lock
     global count
 
@@ -64,32 +79,44 @@ def process(opts):
 def run(args):
     logging.basicConfig(level=logging.INFO)
     dir = os.listdir(args.coords_path)
-    for file in dir:
-        if file.split('.')[-1] == 'txt':
+    for file in tqdm(dir, total=len(dir)):
+        if 'tumor' in file:
             if not os.path.exists(os.path.join(args.patch_path, file.split('.')[0])):
                 os.mkdir(os.path.join(args.patch_path, file.split('.')[0]))
 
-            copyfile(os.path.join(args.coords_path, file.split('.')[0] + '.txt') , \
-                os.path.join(os.path.join(args.patch_path, file.split('.')[0]), 'list.txt'))
+                copyfile(os.path.join(args.coords_path, file.split('.')[0] + '.txt') , \
+                    os.path.join(os.path.join(args.patch_path, file.split('.')[0]), 'list.txt'))
 
-            opts_list = []
-            infile = open(os.path.join(args.coords_path, file.split('.')[0] + '.txt'))
-            for i, line in enumerate(infile):
-                pid, x_center, y_center, label = line.strip('\n').split(',')
-                opts_list.append((i, pid, x_center, y_center, label, args))
-            infile.close()
+                opts_list = []
+                infile = open(os.path.join(args.coords_path, file.split('.')[0] + '.txt'))
+                for i, line in enumerate(infile):
+                    pid, x_center, y_center = line.strip('\n').split(',')
+                    opts_list.append((i, pid, x_center, y_center, args))
+                infile.close()
 
-            pool = Pool(processes=args.num_process)
-            pool.map(process, opts_list)
+                wsi_path = os.path.join(args.wsi_path, pid.split('_')[0], pid + '.tif')
+                slide = openslide.OpenSlide(wsi_path)
+                level = int(args.patch_path.split('l')[-1])
+
+                if 'tumor' in file:
+                    tumor_mask = np.load(os.path.join(args.wsi_path, 'tumor_mask_l1', pid + '.npy')).transpose()
+                    tumor_mask_img = Image.fromarray(tumor_mask).resize(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
+                    tumor_mask_img_full = Image.new(tumor_mask_img.mode, (slide.level_dimensions[level]))
+                    tumor_mask_img_full.paste(tumor_mask_img, (0, 0)+tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
+                    for opts in opts_list:
+                        process(opts, slide, level, tumor_mask_img_full)
+                else:
+                    for opts in opts_list:
+                        process(opts, slide, level)
 
 
 def main():
     args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/training/tumor_mask_l6",
-        "/media/ps/passport2/hhy/camelyon16/training/sample_gen/",
-        "/media/ps/passport2/hhy/camelyon16/training/patch_gen_baseline/"])
-    args.patch_size = 128
-    args.level = 6
+        "/media/ps/passport2/hhy/camelyon16/train",
+        "/media/ps/passport2/hhy/camelyon16/train/sample_gen_l3",
+        "/media/ps/passport2/hhy/camelyon16/train/patch_gen_l3"])
+    args.patch_size = 256
+
     run(args)
 
 if __name__ == '__main__':

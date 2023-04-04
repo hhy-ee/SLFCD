@@ -156,7 +156,11 @@ def run(args):
 
 
 def main():
-    args = parser.parse_args()
+    args = parser.parse_args([
+        "/media/ps/passport2/hhy/camelyon16/testing/images/",
+        "/home/ps/hhy/slfcd/save_train/train_base1/best.ckpt",
+        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base.json",
+        '/media/ps/passport2/hhy/camelyon16/testing/probs_map_base/'])
     run(args)
 
 

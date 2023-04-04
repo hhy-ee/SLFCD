@@ -3,7 +3,7 @@ import os
 import argparse
 import logging
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../../')
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 
 from camelyon16.data.annotation import Formatter  # noqa
 
@@ -16,13 +16,20 @@ parser.add_argument('json_path', default=None, metavar='JSON_PATH', type=str,
 
 
 def run(args):
-    Formatter.camelyon16xml2json(args.xml_path, args.json_path)
+    dir = os.listdir(args.xml_path)
+    for file in dir:
+        if file.split('.')[-1] == 'xml':
+            xml_path = os.path.join(args.xml_path, file)
+            json_path = os.path.join(args.json_path, file.split('.')[0] + '.json')
+            Formatter.camelyon16xml2json(xml_path, json_path)
 
 
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    args = parser.parse_args()
+    args = parser.parse_args([
+        "/media/ps/passport2/hhy/camelyon16/training/annotations/xml",
+        "/media/ps/passport2/hhy/camelyon16/training/annotations/json"])
     run(args)
 
 

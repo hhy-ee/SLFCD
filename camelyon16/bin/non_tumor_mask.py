@@ -18,17 +18,23 @@ parser.add_argument("normal_path", default=None, metavar='NORMAL_PATCH', type=st
 
 
 def run(args):
-    tumor_mask = np.load(args.tumor_path)
-    tissue_mask = np.load(args.tissue_path)
+    dir = os.listdir(args.tumor_path)
+    for file in dir:
+        if file.split('.')[-1] == 'npy':
+            tumor_mask = np.load(os.path.join(args.tumor_path, file))
+            tissue_mask = np.load(os.path.join(args.tissue_path, file))
 
-    normal_mask = tissue_mask & (~ tumor_mask)
+            normal_mask = tissue_mask & (~ tumor_mask)
 
-    np.save(args.normal_path, normal_mask)
+            np.save(os.path.join(args.normal_path, file), normal_mask)
 
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    args = parser.parse_args()
+    args = parser.parse_args([
+        "/media/ps/passport2/hhy/camelyon16/training/tumor_mask_l6",
+        "/media/ps/passport2/hhy/camelyon16/training/tissue_mask_l6",
+        "/media/ps/passport2/hhy/camelyon16/training/normal_mask_l6"])
     run(args)
 
 

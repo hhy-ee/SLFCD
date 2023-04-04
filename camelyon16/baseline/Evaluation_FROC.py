@@ -10,6 +10,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import ndimage as nd
 from skimage import measure
+from tqdm import tqdm
+import cv2
 import os
 import sys
 
@@ -25,11 +27,9 @@ def computeEvaluationMask(maskDIR, resolution, level):
     Returns:
         evaluation_mask
     """
-    slide = openslide.open_slide(maskDIR)
-    dims = slide.level_dimensions[level]
-    pixelarray = np.zeros(dims[0] * dims[1], dtype='uint')
-    pixelarray = np.array(slide.read_region((0, 0), level, dims))
-    distance = nd.distance_transform_edt(255 - pixelarray[:, :, 0])
+
+    pixelarray = (np.load(maskDIR) * 255).astype('uint')
+    distance = nd.distance_transform_edt(255 - pixelarray)
     Threshold = 75 / (resolution * pow(2, level) * 2)  # 75µm is the equivalent size of 5 tumor cells
     binary = distance < Threshold
     filled_image = nd.morphology.binary_fill_holes(binary)
@@ -88,7 +88,7 @@ def readCSVContent(csvDIR):
     return Probs, Xcorr, Ycorr
 
 
-def compute_FP_TP_Probs(Ycorr, Xcorr, Probs, is_tumor, evaluation_mask, Isolated_Tumor_Cells, level):
+def compute_FP_TP_Probs(Ycorr, Xcorr, Probs, is_tumor, evaluation_mask, Isolated_Tumor_Cells):
     """Generates true positive and false positive stats for the analyzed image
 
     Args:
@@ -130,7 +130,7 @@ def compute_FP_TP_Probs(Ycorr, Xcorr, Probs, is_tumor, evaluation_mask, Isolated
     FP_counter = 0
     if (is_tumor):
         for i in range(0, len(Xcorr)):
-            HittedLabel = evaluation_mask[int(Ycorr[i] / pow(2, level)), int(Xcorr[i] / pow(2, level))]
+            HittedLabel = evaluation_mask[Xcorr[i], Ycorr[i]]
             if HittedLabel == 0:
                 FP_probs.append(Probs[i])
                 key = 'FP ' + str(FP_counter)
@@ -148,7 +148,7 @@ def compute_FP_TP_Probs(Ycorr, Xcorr, Probs, is_tumor, evaluation_mask, Isolated
             FP_summary[key] = [Probs[i], Xcorr[i], Ycorr[i]]
             FP_counter += 1
 
-    num_of_tumors = max_label - len(Isolated_Tumor_Cells);
+    num_of_tumors = max_label - len(Isolated_Tumor_Cells)
     return FP_probs, TP_probs, num_of_tumors, detection_summary, FP_summary
 
 
@@ -199,37 +199,48 @@ def plotFROC(total_FPs, total_sensitivity):
     plt.ylabel('Metastasis detection sensitivity', fontsize=12)
     fig.suptitle('Free response receiver operating characteristic curve', fontsize=12)
     plt.plot(total_FPs, total_sensitivity, '-', color='#000000')
+    plt.savefig('/media/ps/passport2/hhy/camelyon16/train/0.png')
     plt.show()
 
 
 if __name__ == "__main__":
-
-    mask_folder = sys.argv[1]
-    result_folder = sys.argv[2]
+    wsi_folder = '/media/ps/passport2/hhy/camelyon16/train/tumor'
+    mask_folder = '/media/ps/passport2/hhy/camelyon16/train/tumor_mask_l6'
+    result_folder = '/media/ps/passport2/hhy/camelyon16/train/dens_map_assign'
+    # result_folder = '/media/ps/passport2/hhy/camelyon16/train/tumor_mask_l3'
+    threshold = 0.5
     result_file_list = []
-    result_file_list += [each for each in os.listdir(result_folder) if each.endswith('.csv')]
+    result_file_list += [each for each in os.listdir(result_folder) if each.endswith('.npy')]
 
-    EVALUATION_MASK_LEVEL = 5  # Image level at which the evaluation is done
+    EVALUATION_MASK_LEVEL = 6  # Image level at which the evaluation is done
     L0_RESOLUTION = 0.243  # pixel resolution at level 0
 
-    FROC_data = np.zeros((4, len(result_file_list)), dtype=np.object)
-    FP_summary = np.zeros((2, len(result_file_list)), dtype=np.object)
-    detection_summary = np.zeros((2, len(result_file_list)), dtype=np.object)
+    # FROC_data = np.zeros((4, len(result_file_list)), dtype=object)
+    # FP_summary = np.zeros((2, len(result_file_list)), dtype=object)
+    # detection_summary = np.zeros((2, len(result_file_list)), dtype=object)
+
+    FROC_data = np.zeros((4, 14), dtype=object)
+    FP_summary = np.zeros((2, 14), dtype=object)
+    detection_summary = np.zeros((2, 14), dtype=object)
 
     ground_truth_test = []
-    ground_truth_test += [each[0:8] for each in os.listdir(mask_folder) if each.endswith('.tif')]
+    ground_truth_test += [each[0:9] for each in os.listdir(mask_folder) if each.endswith('.npy')] # each[0:8] for test dataset
     ground_truth_test = set(ground_truth_test)
 
     caseNum = 0
-    for case in result_file_list:
-        print('Evaluating Performance on image:', case[0:-4])
-        sys.stdout.flush()
-        csvDIR = os.path.join(result_folder, case)
-        Probs, Xcorr, Ycorr = readCSVContent(csvDIR)
-
+    for case in tqdm(result_file_list, total=len(result_file_list)):
+        # print('Evaluating Performance on image:', case[0:-4])
+        # sys.stdout.flush()
+        slide = openslide.open_slide(os.path.join(wsi_folder, case.split('.')[0] + '.tif'))
+        scale = [slide.level_dimensions[EVALUATION_MASK_LEVEL][i] for i in range(2)]
+        result_mask = np.load(os.path.join(result_folder, case)) * 255 # 0~255
+        result_mask = cv2.resize(result_mask.astype(np.uint8), (scale[1], scale[0]), interpolation=cv2.INTER_CUBIC)
+        result_mask = result_mask * ((result_mask / 255) > threshold)
+        Xcorr, Ycorr = np.where((result_mask / 255) > 0.7)
+        Probs = [result_mask[x, y] for x, y in zip(Xcorr, Ycorr)]
         is_tumor = case[0:-4] in ground_truth_test
         if (is_tumor):
-            maskDIR = os.path.join(mask_folder, case[0:-4]) + '.tif'
+            maskDIR = os.path.join(mask_folder, case)
             evaluation_mask = computeEvaluationMask(maskDIR, L0_RESOLUTION, EVALUATION_MASK_LEVEL)
             ITC_labels = computeITCList(evaluation_mask, L0_RESOLUTION, EVALUATION_MASK_LEVEL)
         else:
@@ -240,9 +251,10 @@ if __name__ == "__main__":
         FP_summary[0][caseNum] = case
         detection_summary[0][caseNum] = case
         FROC_data[1][caseNum], FROC_data[2][caseNum], FROC_data[3][caseNum], detection_summary[1][caseNum], \
-        FP_summary[1][caseNum] = compute_FP_TP_Probs(Ycorr, Xcorr, Probs, is_tumor, evaluation_mask, ITC_labels,
-                                                     EVALUATION_MASK_LEVEL)
+        FP_summary[1][caseNum] = compute_FP_TP_Probs(Ycorr, Xcorr, Probs, is_tumor, evaluation_mask, ITC_labels)
         caseNum += 1
+        if case == 'tumor_043.npy':
+            break
 
     # Compute FROC curve
     total_FPs, total_sensitivity = computeFROC(FROC_data)

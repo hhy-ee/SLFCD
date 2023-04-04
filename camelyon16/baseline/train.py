@@ -17,7 +17,7 @@ from tensorboardX import SummaryWriter
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from camelyon16.data.patch_producer import ImageDataset
+from camelyon16.data.image_producer_base import ImageDataset
 
 torch.manual_seed(0)
 torch.cuda.manual_seed_all(0)
@@ -28,12 +28,13 @@ parser.add_argument('cnn_path', default=None, metavar='CNN_PATH', type=str,
                     help='Path to the config file in json format')
 parser.add_argument('save_path', default=None, metavar='SAVE_PATH', type=str,
                     help='Path to the saved models')
-parser.add_argument('--num_workers', default=1, type=int, help='number of'
+parser.add_argument('--num_workers', default=0, type=int, help='number of'
                     ' workers for each data loader, default 2.')
 parser.add_argument('--device_ids', default='0', type=str, help='comma'
                     ' separated indices of GPU to use, e.g. 0,1 for using GPU_0'
                     ' and GPU_1, default 0.')
-
+parser.add_argument('--resume', default=False, type=bool, help='comma'
+                    ' whether to resume the pretrained weight')
 
 def chose_model(cnn):
     if cnn['model'] == 'segmentation':
@@ -96,32 +97,34 @@ def valid_epoch(summary, model, loss_fn,
                 dataloader_valid):
     model.eval()
 
-    steps = len(dataloader_valid)
+    steps = len(dataloader_valid) // 10
     batch_size = dataloader_valid.batch_size
     dataiter_valid = iter(dataloader_valid)
 
     loss_sum = 0
     acc_sum = 0
-    for step in range(steps):
-        data_valid, target_valid = next(dataiter_valid)
-        data_valid = Variable(data_valid.float().cuda(non_blocking=True), volatile=True)
-        target_valid = Variable(target_valid.float().cuda(non_blocking=True))
+    with torch.no_grad():
+        for step in range(steps):
+            data_valid, target_valid = next(dataiter_valid)
+            data_valid = Variable(data_valid.float().cuda(non_blocking=True))
+            target_valid = Variable(target_valid.float().cuda(non_blocking=True))
 
-        output = model(data_valid)
-        output = torch.squeeze(output) # important
-        loss = loss_fn(output, target_valid)
+            output = model(data_valid)
+            output = output['out'][:, 0].flatten() # noqa
+            target_valid = target_valid.flatten()
+            loss = loss_fn(output, target_valid)
 
-        probs = output.sigmoid()
-        predicts = (probs >= 0.5).type(torch.cuda.FloatTensor)
-        acc_data = (predicts == target_valid).type(
-            torch.cuda.FloatTensor).sum().data * 1.0 / len(target_valid)
-        loss_data = loss.data
+            probs = output.sigmoid()
+            predicts = (probs >= 0.5).type(torch.cuda.FloatTensor)
+            acc_data = (predicts == target_valid).type(
+                torch.cuda.FloatTensor).sum().data * 1.0 / len(target_valid)
+            loss_data = loss.data
 
-        loss_sum += loss_data
-        acc_sum += acc_data
+            loss_sum += loss_data
+            acc_sum += acc_data
 
-    summary['loss'] = loss_sum / steps
-    summary['acc'] = acc_sum / steps
+        summary['loss'] = loss_sum / steps
+        summary['acc'] = acc_sum / steps
 
     return summary
 
@@ -145,8 +148,17 @@ def run(args):
     model = chose_model(cnn)
     # fc_features = model.fc.in_features
     # model.fc = nn.Linear(fc_features, 1) # 须知
+
+    summary_train = {'epoch': 0, 'step': 0}
+    if args.resume:
+        checkpoint = torch.load(os.path.join(args.save_path, 'best.ckpt'))
+        summary_train = {'epoch': checkpoint['epoch'], 'step': checkpoint['step']}
+        model.load_state_dict(checkpoint['state_dict'])
+    summary_valid = {'loss': float('inf'), 'acc': 0}
+
     model = DataParallel(model, device_ids=None)
     model = model.cuda()
+
     loss_fn = BCEWithLogitsLoss().cuda()
     optimizer = SGD(model.parameters(), lr=cnn['lr'], momentum=cnn['momentum'])
 
@@ -168,19 +180,17 @@ def run(args):
                                   batch_size=batch_size_valid,
                                   num_workers=num_workers)
 
-    summary_train = {'epoch': 0, 'step': 0}
-    summary_valid = {'loss': float('inf'), 'acc': 0}
     summary_writer = SummaryWriter(args.save_path)
     loss_valid_best = float('inf')
-    for epoch in range(cnn['epoch']):
+    for epoch in range(cnn['epoch'] - summary_train['epoch']):
         summary_train = train_epoch(summary_train, summary_writer, cnn, model,
                                     loss_fn, optimizer,
                                     dataloader_train)
-
-        torch.save({'epoch': summary_train['epoch'],
-                    'step': summary_train['step'],
-                    'state_dict': model.module.state_dict()},
-                   os.path.join(args.save_path, 'train.ckpt'))
+        if (epoch + summary_train['epoch']) >= 20 and (epoch + summary_train['epoch']) % 5 ==0:
+            torch.save({'epoch': summary_train['epoch'],
+                        'step': summary_train['step'],
+                        'state_dict': model.module.state_dict()},
+                    os.path.join(args.save_path, 'train_e{}.ckpt'.format(epoch)))
 
         time_now = time.time()
         summary_valid = valid_epoch(summary_valid, model, loss_fn,
@@ -213,8 +223,10 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     args = parser.parse_args([
-        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_baseline.json",
-        "/home/ps/hhy/slfcd/save_train/train_baseline"])
+        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l2.json",
+        "/home/ps/hhy/slfcd/save_train/train_base_l2"])
+    args.device_ids = '1'
+    args.resume = True
     run(args)
 
 

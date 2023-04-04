@@ -5,6 +5,8 @@ import logging
 
 import numpy as np
 
+from tqdm import tqdm
+
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/../../")
 
 parser = argparse.ArgumentParser(description="Get the normal region"
@@ -18,14 +20,15 @@ parser.add_argument("normal_path", default=None, metavar='NORMAL_PATCH', type=st
 
 
 def run(args):
-    dir = os.listdir(args.wsi_path)
-    for file in dir:
-        tumor_mask = np.load(os.path.join(args.tumor_path, file.split('.')[0] + '.npy'))
-        tissue_mask = np.load(os.path.join(args.tissue_path, file.split('.')[0] + '.npy'))
+    dir = os.listdir(args.tumor_path)
+    for file in tqdm(dir, total=len(dir)):
+        if file.split('.')[-1] == 'npy':
+            tumor_mask = np.load(os.path.join(args.tumor_path, file))
+            tissue_mask = np.load(os.path.join(args.tissue_path, file))
 
-        normal_mask = tissue_mask & (~ tumor_mask)
+            normal_mask = tissue_mask & (~ tumor_mask)
 
-        np.save(os.path.join(args.normal_path, file.split('.')[0] + '.npy'), normal_mask)
+            np.save(os.path.join(args.normal_path, file), normal_mask)
 
 def main():
     logging.basicConfig(level=logging.INFO)
