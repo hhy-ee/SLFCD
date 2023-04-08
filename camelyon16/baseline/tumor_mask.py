@@ -55,15 +55,12 @@ def run(args):
             size = tuple([int(i / 2**level) for i in slide.level_dimensions[0]])
             mask_tumor = cv2.resize(mask_tumor.astype(np.uint8), size, interpolation=cv2.INTER_CUBIC)
             mask_tumor = np.transpose(mask_tumor)
-            tumor_mask_img_full = np.zeros(slide.level_dimensions[level])
-            tumor_mask_img_full[0: size[0], 0: size[1]] = mask_tumor
-            tumor_mask_img_full = tumor_mask_img_full[:] > 127
-            np.save(os.path.join(args.npy_path, file.split('.')[0] + '.npy'), tumor_mask_img_full)
+            mask_tumor = mask_tumor[:] > 127
+            np.save(os.path.join(args.npy_path, file.split('.')[0] + '.npy'), mask_tumor)
 
             if args.vis_result:
                 img_tumor = slide.read_region((0, 0), level,
                                     tuple([int(i / 2**level) for i in slide.level_dimensions[0]])).convert('RGB')
-                img_tumor = img_tumor.resize(slide.level_dimensions[level])
                 mask_tumor = cv2.applyColorMap((mask_tumor * 255).astype(np.uint8), cv2.COLORMAP_JET)
                 mask_tumor = Image.fromarray(cv2.cvtColor(mask_tumor, cv2.COLOR_BGR2RGB).transpose((1,0,2)))
                 heat_img = Image.blend(img_tumor, mask_tumor, 0.3)

@@ -185,12 +185,12 @@ def run(args):
 
             probs_map /= 8
         
-        # tissue_mask_img = Image.fromarray(tissue.transpose()).resize(slide.level_dimensions[level])
-        # probs_map_img = Image.fromarray(probs_map.transpose()).resize(slide.level_dimensions[level])
-        # probs_map = np.asarray(probs_map_img) * np.asarray(tissue_mask_img)
-        # probs_map = (probs_map * 255).astype(np.uint8).transpose()
-        # probs_map = cv2.GaussianBlur(probs_map,(13,13), 11)
-        # np.save(os.path.join(args.probs_map_path, file.split('.')[0] + '.npy'), probs_map)
+        tissue_mask_img = Image.fromarray(tissue.transpose()).resize(slide.level_dimensions[level])
+        probs_map_img = Image.fromarray(probs_map.transpose()).resize(slide.level_dimensions[level])
+        probs_map = np.asarray(probs_map_img) * np.asarray(tissue_mask_img)
+        probs_map = (probs_map * 255).astype(np.uint8).transpose()
+        probs_map = cv2.GaussianBlur(probs_map,(13,13), 11)
+        np.save(os.path.join(args.probs_map_path, file.split('.')[0] + '.npy'), probs_map)
 
         # level_show = 4
         # img_rgb = slide.read_region((0, 0), level_show, tuple([int(i / 2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')

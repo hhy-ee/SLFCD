@@ -62,33 +62,39 @@ if __name__ == "__main__":
         slide = openslide.OpenSlide(file_name)
         bbox_info = candidates[file_name]
         dens_map = np.load(os.path.join(args.dens_dir, os.path.basename(file_name).split('.')[0] + '.npy'))
-        size_scale = (slide.level_dimensions[level][1], slide.level_dimensions[level][0])
-        dens_map = cv2.resize(dens_map, size_scale, interpolation=cv2.INTER_CUBIC) / 255
+        # size_scale = (slide.level_dimensions[level][1], slide.level_dimensions[level][0])
+        size_scale = tuple([int(i / 2**6) for i in slide.level_dimensions[0]])
+        dens_map = cv2.resize(dens_map, size_scale, interpolation=cv2.INTER_CUBIC).transpose() / 255
+        scale = 2 ** (level - 6)
         boxes = []
         for box in bbox_info:
-            left, top, right, bot = box[0][0], box[0][1], box[1][0], box[1][1]
-            score = dens_map[left:right, top:bot].sum() / box[2]
-            boxes.append([left, top, right, bot, score, box[2]])
+            left = int(box[0][0] * scale)
+            right = int(box[1][0] * scale)
+            top = int(box[0][1] * scale)
+            bot = int(box[1][1] * scale)
+            area = (right - left) * (bot - top)
+            score = dens_map[left:right, top:bot].mean()
+            boxes.append([box[0][0], box[0][1], box[1][0], box[1][1], score, box[2]])
         boxes = np.array(boxes)
         cluster_boxes_list, cluster_boxes_dict = NMM(boxes, args.iou_threshold)
 
-        # # img show
-        # level_show = 4
-        # img = slide.read_region((0, 0), level_show,
-        #                 tuple([int(i / 2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
+        # img show
+        level_show = 4
+        img = slide.read_region((0, 0), level_show,
+                        tuple([int(i / 2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
         # img = img.resize(slide.level_dimensions[level_show])
-        # img_draw = ImageDraw.ImageDraw(img)
+        img_draw = ImageDraw.ImageDraw(img)
 
-        # scale_show = [slide.level_dimensions[level_show][i] / slide.level_dimensions[level][i] for i in range(2)]
-        # for cluster in cluster_boxes_dict:
-        #     for child in cluster['child']:
-        #         chi_box = child['cluster_box']
-        #         img_draw.rectangle(((chi_box[0] * scale_show[0], chi_box[1] * scale_show[1]), \
-        #             ((chi_box[0]-1+chi_box[2]) * scale_show[0], (chi_box[1]-1+chi_box[3]) * scale_show[1])), fill=None, outline='blue', width=5)
-        #     clu_box = cluster['cluster_box']
-        #     img_draw.rectangle(((clu_box[0] * scale_show[0], clu_box[1] * scale_show[1]), \
-        #             ((clu_box[0]-1+clu_box[2]) * scale_show[0], (clu_box[1]-1+clu_box[3]) * scale_show[1])), fill=None, outline='green', width=5)
-        # img.save(os.path.join(args.output_folder, os.path.basename(file_name).split('.')[0] + '.png'))
+        scale_show = 2 ** (level - level_show)
+        for cluster in cluster_boxes_dict:
+            for child in cluster['child']:
+                chi_box = child['cluster_box']
+                img_draw.rectangle(((chi_box[0] * scale_show, chi_box[1] * scale_show), \
+                    ((chi_box[0]-1+chi_box[2]) * scale_show, (chi_box[1]-1+chi_box[3]) * scale_show)), fill=None, outline='blue', width=5)
+            clu_box = cluster['cluster_box']
+            img_draw.rectangle(((clu_box[0] * scale_show, clu_box[1] * scale_show), \
+                    ((clu_box[0]-1+clu_box[2]) * scale_show, (clu_box[1]-1+clu_box[3]) * scale_show)), fill=None, outline='green', width=5)
+        img.save(os.path.join(args.output_folder, os.path.basename(file_name).split('.')[0] + '.png'))
 
         # add annotation
         # label = np.load(os.path.join(args.label_folder, os.path.basename(file_name).split('.')[0] + '.npy'))

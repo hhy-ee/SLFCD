@@ -31,7 +31,7 @@ def run(args):
         # note the shape of img_RGB is the transpose of slide.level_dimensions
         img_RGB = slide.read_region((0, 0), level,
                                     tuple([int(i / 2**level) for i in slide.level_dimensions[0]])).convert('RGB')
-        img_RGB = img_RGB.resize(slide.level_dimensions[level])
+        # img_RGB = img_RGB.resize(slide.level_dimensions[level])
         img_RGB = np.transpose(np.array(img_RGB), axes=[1, 0, 2])
 
         img_HSV = rgb2hsv(img_RGB)

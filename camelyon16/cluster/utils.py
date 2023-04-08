@@ -90,7 +90,7 @@ def split_overlay_map(grid, level):
                             queue.append([i_cp, j_cp - 1])
                             queue.append([i_cp - 1, j_cp])
                 pixel_area = (right - left + 1) * (bot - top + 1)
-                if pixel_area > (512 * 512) / (2**(6-level))**2:
+                if pixel_area > (1024 * 1024) / (2**(6-level))**2:
                     queue = []
                     break
 
@@ -100,7 +100,7 @@ def split_overlay_map(grid, level):
             # compute pixel area by split_coord
     return result
 
-def save_cropped_result(img_array, window_size_threshold, level, density_prob_threshold, output_dir):
+def save_cropped_result1(img_array, window_size_threshold, level, density_prob_threshold, output_dir):
     """
     A wrapper to conduct all necessary operation for generating density crops
     :param img_array: The input image to crop on
@@ -157,6 +157,65 @@ def save_cropped_result(img_array, window_size_threshold, level, density_prob_th
 
     with open(os.path.join(output_dir, 'results.json'), 'w') as result_file:
         json.dump(save_dict, result_file)
+
+def save_cropped_result(img_array, window_size_threshold, level, density_prob_threshold, output_dir):
+    """
+    A wrapper to conduct all necessary operation for generating density crops
+    :param img_array: The input image to crop on
+    :param window_size: The kernel selected to slide on images to gather crops
+    :param threshold: determine if the crops are ROI, only crop when total pixel sum exceeds threshold
+    :param output_dens_dir: The output dir to save density map
+    :param output_img_dir: The output dir to save images
+    :param output_anno_dir: The output dir to save annotations
+    :param mode: The dataset to operate on (train/val/test)
+    :return:
+    """
+    save_dict = {}
+    for img_file in tqdm(img_array, total=len(img_array)):
+        slide = openslide.OpenSlide(img_file)
+
+        overlay_map = np.load(img_file.replace("tumor/", "dens_map_sliding_l3/").replace("tif", "npy"))
+        level_size = tuple([int(i / 2**6) for i in slide.level_dimensions[0]])
+        overlay_map = Image.fromarray(overlay_map.transpose()).resize(level_size)
+        overlay_map = ((np.asarray(overlay_map).transpose() / 255) > density_prob_threshold) * 255
+
+        result = split_overlay_map(overlay_map, level)
+        scale = 2 ** (6 - level)
+        result_save = [[i[0], (int(i[1][1] * scale), int(i[1][0] * scale)), \
+                            (int(i[2][1] * scale), int(i[2][0] * scale))] for i in result]
+        
+        # save dict
+        new_result = []
+        for info in result_save:
+            pixel_area = (info[2][0] - info[1][0] + 1) * (info[2][1] - info[1][1] + 1)
+            if pixel_area < window_size_threshold[0] * window_size_threshold[1]:
+                continue
+            else:
+                new_result.append((info[1], info[2], pixel_area))
+        save_dict.update({img_file: new_result})
+
+        # img_show
+        level_show = 4
+        img = slide.read_region((0, 0), level_show,
+                        tuple([int(i / 2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
+        img_draw = ImageDraw.ImageDraw(img)
+
+        scale_show = 2 ** (6 - level_show)
+        result_show = [[i[0], (int(i[1][1] * scale_show), int(i[1][0] * scale_show)), \
+                            (int(i[2][1] * scale_show), int(i[2][0] * scale_show))] for i in result]
+        for info in result_show:
+            pixel_area = (info[2][0] - info[1][0] + 1) * (info[2][1] - info[1][1] + 1)
+            if pixel_area < (window_size_threshold[0] * window_size_threshold[1]) / (2**(level_show-level))**2:
+                continue
+            else:
+                img_draw.rectangle((info[1],info[2]), fill=None, outline='blue', width=5)
+        img = img.resize(slide.level_dimensions[4])
+        img.save(os.path.join('/media/ps/passport2/hhy/camelyon16/train/crop_split_l{}/'.format(level), \
+                                 os.path.basename(img_file).split('.')[0] + '.png'))
+
+    with open(os.path.join(output_dir, 'results.json'), 'w') as result_file:
+        json.dump(save_dict, result_file)
+
 
 def generate_crop(img_file, level, slide, overlay_map, window_size_threshold=(70, 70)):
     """
