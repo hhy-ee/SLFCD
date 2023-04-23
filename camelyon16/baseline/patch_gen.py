@@ -96,7 +96,7 @@ def run(args):
 
                 wsi_path = os.path.join(args.wsi_path, pid.split('_')[0], pid + '.tif')
                 slide = openslide.OpenSlide(wsi_path)
-                level = int(args.patch_path.split('l')[-1])
+                level = int(args.patch_path.split('l')[-1]) # 0
 
                 if 'tumor' in file:
                     tumor_mask = np.load(os.path.join(args.wsi_path, 'tumor_mask_l1', pid + '.npy')).transpose()
@@ -113,8 +113,8 @@ def run(args):
 def main():
     args = parser.parse_args([
         "/media/ps/passport2/hhy/camelyon16/train",
-        "/media/ps/passport2/hhy/camelyon16/train/sample_gen_l3",
-        "/media/ps/passport2/hhy/camelyon16/train/patch_gen_l3"])
+        "/media/ps/passport2/hhy/camelyon16/train/sample_gen_l0",
+        "/media/ps/passport2/hhy/camelyon16/train/patch_gen_l0"])
     args.patch_size = 256
 
     run(args)

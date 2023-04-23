@@ -93,8 +93,9 @@ def main():
         "/media/ps/passport2/hhy/camelyon16/train/",
         "/media/ps/passport2/hhy/camelyon16/train/tumor_mask_l6",
         "/media/ps/passport2/hhy/camelyon16/train/tissue_mask_l6",
-        "/media/ps/passport2/hhy/camelyon16/train/sample_gen_l3",
+        "/media/ps/passport2/hhy/camelyon16/train/sample_gen_l0",
         '1000'])
+    args.level = 0
     run(args)
 
 

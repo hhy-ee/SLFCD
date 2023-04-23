@@ -46,16 +46,22 @@ def run(args):
         min_B = img_RGB[:, :, 2] > args.RGB_min
 
         tissue_mask = tissue_S & tissue_RGB & min_R & min_G & min_B
-        if 'tumor' in file:
+        if 'tumor' in file or 'test' in file:
             tumor_path = os.path.join(os.path.dirname(args.tissue_path), 'tumor_mask_l{}'.format(level))
-            tumor_mask = np.load(os.path.join(tumor_path, file.split('.')[0] + '.npy'))
-            tissue_mask = tissue_mask | tumor_mask
+            if os.path.exists(os.path.join(tumor_path, file.split('.')[0] + '.npy')):
+                tumor_mask = np.load(os.path.join(tumor_path, file.split('.')[0] + '.npy'))
+                tissue_mask = tissue_mask | tumor_mask
         np.save(os.path.join(args.tissue_path, file.split('.')[0] + '.npy'), tissue_mask)
 
 def main():
+    # args = parser.parse_args([
+    #     "/media/ps/passport2/hhy/camelyon16/train/tumor",
+    #     "/media/ps/passport2/hhy/camelyon16/train/tissue_mask_l0"])
+    
     args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/train/tumor",
-        "/media/ps/passport2/hhy/camelyon16/train/tissue_mask_l6"])
+        "/media/ps/passport2/hhy/camelyon16/test/images",
+        "/media/ps/passport2/hhy/camelyon16/test/tissue_mask_l5"])
+    
     run(args)
 
 

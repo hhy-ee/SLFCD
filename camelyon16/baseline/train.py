@@ -223,10 +223,10 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     args = parser.parse_args([
-        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l2.json",
-        "/home/ps/hhy/slfcd/save_train/train_base_l2"])
+        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l0.json",
+        "/home/ps/hhy/slfcd/save_train/train_base_l0"])
     args.device_ids = '1'
-    args.resume = True
+    args.resume = False
     run(args)
 
 

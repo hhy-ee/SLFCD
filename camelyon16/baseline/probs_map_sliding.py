@@ -34,7 +34,7 @@ parser.add_argument('cnn_path', default=None, metavar='CNN_PATH', type=str,
                     ' the ckpt file')
 parser.add_argument('probs_map_path', default=None, metavar='PROBS_MAP_PATH',
                     type=str, help='Path to the output probs_map numpy file')
-parser.add_argument('--GPU', default='2', type=str, help='which GPU to use'
+parser.add_argument('--GPU', default='1', type=str, help='which GPU to use'
                     ', default 0')
 parser.add_argument('--num_workers', default=0, type=int, help='number of '
                     'workers to use to make batch, default 5')
@@ -110,10 +110,12 @@ def run(args):
 
     with open(args.cnn_path) as f:
         cnn = json.load(f)
-    dir = os.listdir(args.wsi_path)
     level = int(args.probs_map_path.split('l')[-1])
+    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tumor_mask_l2'))
     time_total = 0.0
     for file in dir:
+        if os.path.exists(os.path.join(args.probs_map_path, file)) or file=='result':
+            continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6', file.split('.')[0]+'.npy'))
         ckpt = torch.load(args.ckpt_path)
@@ -168,7 +170,7 @@ def run(args):
         probs_map = cv2.GaussianBlur((probs_map * 255).astype(np.uint8), (13,13), 11)
         np.save(os.path.join(args.probs_map_path, file.split('.')[0] + '.npy'), probs_map)
 
-        level_show = 4
+        level_show = 6
         img_rgb = slide.read_region((0, 0), level_show, tuple([int(i / 2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
         img_rgb = np.asarray(img_rgb).transpose((1,0,2))
         probs_img_rgb = Image.fromarray(probs_map.transpose()).resize(img_rgb.shape[:2])
@@ -182,19 +184,27 @@ def run(args):
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
 
 def main():
-    args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/train/tumor",
-        "/home/ps/hhy/slfcd/save_train/train_base_l2/best.ckpt",
-        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l2.json",
-        '/media/ps/passport2/hhy/camelyon16/train/dens_map_sliding_l2'])
-    args.overlap = 0
-    args.GPU = "1"
+    # args = parser.parse_args([
+    #     "/media/ps/passport2/hhy/camelyon16/train/tumor",
+    #     "/home/ps/hhy/slfcd/save_train/train_base_l2/best.ckpt",
+    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l2.json",
+    #     '/media/ps/passport2/hhy/camelyon16/train/dens_map_sliding_l2'])
+    # args.overlap = 0
+    # args.GPU = "1"
 
     # args = parser.parse_args([
     #     "/media/ps/passport2/hhy/camelyon16/test/images",
-    #     "/home/ps/hhy/slfcd/save_train/train_base_l3/best.ckpt",
-    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l3.json",
-    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l3'])
+    #     "/home/ps/hhy/slfcd/save_train/train_base_l1/best.ckpt",
+    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
+    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l1'])
+    # args.GPU = "1"
+    
+    args = parser.parse_args([
+        "/media/ps/passport2/hhy/camelyon16/test/images", # wsi_path
+        "/home/ps/hhy/slfcd/save_train/train_base_l0/best.ckpt", # ckpt_path
+        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l0.json", # cnn_path
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l0']) # probs_map_path
+    args.GPU = "0"
     run(args)
 
 

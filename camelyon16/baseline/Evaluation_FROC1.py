@@ -16,6 +16,26 @@ import os
 import sys
 
 
+def NMS(pred_mask, threshold, level_in, level_out, base_radius=3):
+    prob_wsi, x_wsi, y_wsi = [], [], []
+    X, Y = pred_mask.shape
+    radius = base_radius * 2**(max(0, 8-level_in))
+    while np.max(pred_mask / 255) > threshold:
+        prob_max = pred_mask.max()
+        max_idx = np.where(pred_mask == prob_max)
+        x_mask, y_mask = max_idx[0][0], max_idx[1][0]
+        prob_wsi.append(prob_max)
+        x_wsi.append(x_mask * 2**(level_in-level_out))
+        y_wsi.append(y_mask * 2**(level_in-level_out))
+        x_min = x_mask - radius if x_mask - radius > 0 else 0
+        x_max = x_mask + radius if x_mask + radius <= X else X
+        y_min = y_mask - radius if y_mask - radius > 0 else 0
+        y_max = y_mask + radius if y_mask + radius <= Y else Y
+        
+        pred_mask[x_min: x_max, y_min: y_max] = 0
+    return prob_wsi, x_wsi, y_wsi
+        
+
 def computeEvaluationMask(maskDIR, resolution, level):
     """Computes the evaluation mask.
 
@@ -204,17 +224,22 @@ def plotFROC(total_FPs, total_sensitivity):
 
 
 if __name__ == "__main__":
+    
+    # configuration
     wsi_folder = '/media/ps/passport2/hhy/camelyon16/test/images'
     mask_folder = '/media/ps/passport2/hhy/camelyon16/test/tumor_mask_l5'
-    result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_ncrf_l5'
-    
+    result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_ncrf_l6'
+    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l1'
     threshold = 0.5
+    
+    # default setting
+    EVALUATION_MASK_LEVEL = int(mask_folder.split('l')[-1])  # Image level at which the evaluation is done
+    PREDICT_MASK_LEVEL = int(result_folder.split('l')[-1]) 
+    L0_RESOLUTION = 0.243  # pixel resolution at level 0
+    
     result_file_list = []
     result_file_list += [each for each in os.listdir(result_folder) if each.endswith('.npy')]
-
-    EVALUATION_MASK_LEVEL = int(mask_folder.split('l')[-1])  # Image level at which the evaluation is done
-    L0_RESOLUTION = 0.243  # pixel resolution at level 0
-
+    
     FROC_data = np.zeros((4, len(result_file_list)), dtype=object)
     FP_summary = np.zeros((2, len(result_file_list)), dtype=object)
     detection_summary = np.zeros((2, len(result_file_list)), dtype=object)
@@ -224,16 +249,21 @@ if __name__ == "__main__":
     ground_truth_test = set(ground_truth_test)
 
     caseNum = 0
+    
     for case in tqdm(result_file_list, total=len(result_file_list)):
         # print('Evaluating Performance on image:', case[0:-4])
         # sys.stdout.flush()
         slide = openslide.open_slide(os.path.join(wsi_folder, case.split('.')[0] + '.tif'))
-        scale = [int(i / 2**EVALUATION_MASK_LEVEL) for i in slide.level_dimensions[0]]
-        result_mask = np.load(os.path.join(result_folder, case)) # 0~255 uint8 
-        result_mask = cv2.resize(result_mask.astype(np.uint8), (scale[1], scale[0]), interpolation=cv2.INTER_CUBIC)
-        result_mask = result_mask * ((result_mask / 255) > threshold)
-        Xcorr, Ycorr = np.where((result_mask / 255) > threshold)
-        Probs = [result_mask[x, y] for x, y in zip(Xcorr, Ycorr)]
+        result_mask = np.load(os.path.join(result_folder, case)) # 0~255 uint8
+        
+        # our segmentmodel
+        # scale = [int(i / 2**6) for i in slide.level_dimensions[0]]
+        # result_mask = cv2.resize(result_mask.astype(np.uint8), (scale[1], scale[0]), interpolation=cv2.INTER_CUBIC)
+        # Probs, Xcorr, Ycorr = NMS(result_mask, threshold, 6, EVALUATION_MASK_LEVEL)
+        
+        # ncrf
+        Probs, Xcorr, Ycorr = NMS(result_mask, threshold, PREDICT_MASK_LEVEL, EVALUATION_MASK_LEVEL)
+
         is_tumor = case[0:-4] in ground_truth_test
         if (is_tumor):
             maskDIR = os.path.join(mask_folder, case)

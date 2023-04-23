@@ -69,16 +69,17 @@ def run(args):
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/train/tumor",
-        "/media/ps/passport2/hhy/camelyon16/train/annotations/json",
-        "/media/ps/passport2/hhy/camelyon16/train/tumor_mask_l2"])
-    args.vis_result = False
-
     # args = parser.parse_args([
-    #     "/media/ps/passport2/hhy/camelyon16/testing/images/",
-    #     "/media/ps/passport2/hhy/camelyon16/testing/annotations/json/",
-    #     "/media/ps/passport2/hhy/camelyon16/testing/tumor_mask/"])
+    #     "/media/ps/passport2/hhy/camelyon16/train/tumor",
+    #     "/media/ps/passport2/hhy/camelyon16/train/annotations/json",
+    #     "/media/ps/passport2/hhy/camelyon16/train/tumor_mask_l1"])
+    # args.vis_result = False
+
+    args = parser.parse_args([
+        "/media/ps/passport2/hhy/camelyon16/test/images",
+        "/media/ps/passport2/hhy/camelyon16/test/annotations/json",
+        "/media/ps/passport2/hhy/camelyon16/test/tumor_mask_l5"])
+    args.vis_result = False
     run(args)
 
 if __name__ == "__main__":

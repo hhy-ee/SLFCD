@@ -41,10 +41,10 @@ def parse_args():
     parser.add_argument('--label_folder', help='The dir to annotations')
     parser.add_argument('--output_folder', help='The dir to save generated images and annotations')
 
-    args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/train/crop_split_l2/results.json', 
+    args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/train/crop_split_l3/results.json', 
                               '/media/ps/passport2/hhy/camelyon16/train/dens_map_sliding_l3', '0.3'])
-    args.label_folder = '/media/ps/passport2/hhy/camelyon16/train/tumor_mask_l2/'
-    args.output_folder = '/media/ps/passport2/hhy/camelyon16/train/crop_cluster_l2'
+    args.label_folder = '/media/ps/passport2/hhy/camelyon16/train/tumor_mask_l3/'
+    args.output_folder = '/media/ps/passport2/hhy/camelyon16/train/crop_cluster_l3'
     return args
 
 

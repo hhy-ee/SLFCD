@@ -34,8 +34,8 @@ def parse_args():
     parser.add_argument('window_size_threshold', help='The size of kernel, format: h_w')
     parser.add_argument('density_prob_threshold', type=float, help='Threshold defined to select the cropped region')
     parser.add_argument('--output_folder', help='The dir to save generated images and annotations')
-    args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/train', '70_70', '0.5'])
-    args.output_folder = '/media/ps/passport2/hhy/camelyon16/train/crop_split_l2'
+    args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/train', '50_50', '0.5'])
+    args.output_folder = '/media/ps/passport2/hhy/camelyon16/train/crop_split_l3'
     return args
 
 
