@@ -228,7 +228,7 @@ if __name__ == "__main__":
     # configuration
     wsi_folder = '/media/ps/passport2/hhy/camelyon16/test/images'
     mask_folder = '/media/ps/passport2/hhy/camelyon16/test/tumor_mask_l5'
-    result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_ncrf_l6'
+    result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l8'
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l1'
     threshold = 0.5
     
@@ -259,10 +259,10 @@ if __name__ == "__main__":
         # our segmentmodel
         # scale = [int(i / 2**6) for i in slide.level_dimensions[0]]
         # result_mask = cv2.resize(result_mask.astype(np.uint8), (scale[1], scale[0]), interpolation=cv2.INTER_CUBIC)
-        # Probs, Xcorr, Ycorr = NMS(result_mask, threshold, 6, EVALUATION_MASK_LEVEL)
+        # Probs, Xcorr, Ycorr = NMS(result_mask, threshold, 6, EVALUATION_MASK_LEVEL, base_radius=6)
         
         # ncrf
-        Probs, Xcorr, Ycorr = NMS(result_mask, threshold, PREDICT_MASK_LEVEL, EVALUATION_MASK_LEVEL)
+        Probs, Xcorr, Ycorr = NMS(result_mask, threshold, PREDICT_MASK_LEVEL, EVALUATION_MASK_LEVEL, base_radius=3)
 
         is_tumor = case[0:-4] in ground_truth_test
         if (is_tumor):
