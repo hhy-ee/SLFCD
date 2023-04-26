@@ -195,12 +195,20 @@ def main():
     #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l1'])
     # args.GPU = "1"
     
+    # args = parser.parse_args([
+    #     "/media/ps/passport2/hhy/camelyon16/test/images",
+    #     "/home/ps/hhy/slfcd/save_train/train_base_l1",
+    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
+    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l8']) 
+    # args.GPU = "3"
+
     args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/test/images",
-        "/home/ps/hhy/slfcd/save_train/train_base_l1",
-        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l8']) 
-    args.GPU = "3"
+        "/media/hy/hhy_data/camelyon16/train/tumor",
+        "/media/ruiq/Data/hhy/SLFCD/save_train/train_base_l1",
+        "/media/ruiq/Data/hhy/SLFCD/camelyon16/configs/cnn_base_l1.json",
+        '/media/hy/hhy_data/camelyon16/train/dens_map_sliding_l8']) 
+    args.GPU = "1"
+    
     run(args)
 
 
