@@ -2,55 +2,13 @@ import cv2
 import os
 import openslide
 import json
+import time
 import numpy as np
 from PIL import Image
 from PIL import ImageDraw
 from tqdm import tqdm
 
-def split_overlay_map1(grid, level):
-    """
-    Conduct eight-connected-component methods on grid to connnect all pixel within the similar region
-    :param grid: desnity mask to connect
-    :return: merged regions for cropping purpose
-    """
-    if grid is None or grid[0] is None:
-        return 0
-    # Assume overlap_map is a 2d feature map
-    m, n = grid.shape
-    visit = [[0 for _ in range(n)] for _ in range(m)]
-    count, queue, result = 0, [], []
-    for i in range(m):
-        for j in range(n):
-            if not visit[i][j]:
-                if grid[i][j] == 0:
-                    visit[i][j] = 1
-                    continue
-                queue.append([i, j])
-                top, left = float("inf"), float("inf")
-                bot, right = float("-inf"), float("-inf")
-                while queue:
-                    i_cp, j_cp = queue.pop(0)
-                    top = min(i_cp, top)
-                    left = min(j_cp, left)
-                    bot = max(i_cp, bot)
-                    right = max(j_cp, right)
-                    if 0 <= i_cp < m and 0 <= j_cp < n and not visit[i_cp][j_cp]:
-                        visit[i_cp][j_cp] = 1
-                        if grid[i_cp][j_cp] == 255:
-                            queue.append([i_cp, j_cp + 1])
-                            queue.append([i_cp + 1, j_cp])
-                            queue.append([i_cp, j_cp - 1])
-                            queue.append([i_cp - 1, j_cp])
-                    if pixel_area > (512 * 512) / (2**(6-level))**2:
-                        break
-                count += 1
-                assert top < bot and left < right, "Coordination error!"
-                pixel_area = (right - left + 1) * (bot - top + 1)
-                result.append([count, (max(0, left), max(0, top)), (min(right, n), min(bot, m)), pixel_area])
-                # compute pixel area by split_coord
-    return result
-
-def split_overlay_map(grid, level):
+def split_overlay_map1(grid, max_window_size, densmap_level, output_level):
     """
     Conduct eight-connected-component methods on grid to connnect all pixel within the similar region
     :param grid: desnity mask to connect
@@ -90,75 +48,69 @@ def split_overlay_map(grid, level):
                             queue.append([i_cp, j_cp - 1])
                             queue.append([i_cp - 1, j_cp])
                 pixel_area = (right - left + 1) * (bot - top + 1)
-                if pixel_area > (1024 * 1024) / (2**(6-level))**2:
+                if pixel_area > (max_window_size[0] * max_window_size[1]) / (2**(densmap_level - output_level))**2:
                     queue = []
                     break
 
             if  top < bot and left < right:
                 count += 1
-                result.append([count, (max(0, left), max(0, top)), (min(right, n), min(bot, m)), pixel_area])
+                result.append([count, (max(0, left), max(0, top)), (min(right + 1, n), min(bot + 1, m)), pixel_area])
             # compute pixel area by split_coord
     return result
 
-def save_cropped_result1(img_array, window_size_threshold, level, density_prob_threshold, output_dir):
+def split_overlay_map(grid, max_window_size, densmap_level, output_level):
     """
-    A wrapper to conduct all necessary operation for generating density crops
-    :param img_array: The input image to crop on
-    :param window_size: The kernel selected to slide on images to gather crops
-    :param threshold: determine if the crops are ROI, only crop when total pixel sum exceeds threshold
-    :param output_dens_dir: The output dir to save density map
-    :param output_img_dir: The output dir to save images
-    :param output_anno_dir: The output dir to save annotations
-    :param mode: The dataset to operate on (train/val/test)
-    :return:
+    Conduct eight-connected-component methods on grid to connnect all pixel within the similar region
+    :param grid: desnity mask to connect
+    :return: merged regions for cropping purpose
     """
-    save_dict = {}
-    for img_file in tqdm(img_array, total=len(img_array)):
-        slide = openslide.OpenSlide(img_file)
+    if grid is None or grid[0] is None:
+        return 0
+    x_idx, y_idx = np.array([]).astype(np.int64), np.array([]).astype(np.int64)
+    for prob in np.unique(grid)[-1:0:-1]:
+        idx = np.where(grid == prob)
+        x_idx = np.concatenate((x_idx, idx[0]))
+        y_idx = np.concatenate((y_idx, idx[1]))
 
-        overlay_map = np.load(img_file.replace("tumor/", "dens_map_sliding_l3/").replace("tif", "npy"))
-        overlay_map = Image.fromarray(overlay_map.transpose()).resize(slide.level_dimensions[6])
-        overlay_map = ((np.asarray(overlay_map).transpose() / 255) > density_prob_threshold) * 255
-
-        result = split_overlay_map(overlay_map, level)
-        scale = [slide.level_dimensions[level][i] / slide.level_dimensions[6][i] for i in range(2)]
-        result = [[i[0], (int(i[1][1] * scale[0]), int(i[1][0] * scale[1])), \
-                            (int(i[2][1] * scale[0]), int(i[2][0] * scale[1]))] for i in result]
-        
-        # save dict
-        new_result = []
-        for info in result:
-            pixel_area = (info[2][0] - info[1][0] + 1) * (info[2][1] - info[1][1] + 1)
-            if pixel_area < window_size_threshold[0] * window_size_threshold[1]:
+    # Assume overlap_map is a 2d feature map
+    m, n = grid.shape
+    visit = np.zeros((m, n))
+    count, queue, result = 0, [], []
+    for i, j in zip(x_idx, y_idx):
+        if not visit[i][j]:
+            if grid[i][j] == 0:
+                visit[i][j] = 1
                 continue
-            else:
-                new_result.append((info[1], info[2], pixel_area))
-        save_dict.update({img_file: new_result})
+            queue.append([i, j])
+            top, left = float("inf"), float("inf")
+            bot, right = float("-inf"), float("-inf")
+            while queue:
+                i_cp, j_cp = queue.pop(0)
+                if right - left + 1 <= max_window_size[0] / 2**(densmap_level - output_level):
+                    left = min(j_cp, left)
+                    right = max(j_cp, right)
+                    if 0 <= i_cp < m and 0 <= j_cp < n and not visit[i_cp][j_cp]:
+                        if grid[i_cp][j_cp] != 0:
+                            queue.append([i_cp, j_cp - 1])
+                            queue.append([i_cp, j_cp + 1])
+                if bot - top + 1 <= max_window_size[1] / 2**(densmap_level - output_level):
+                    top = min(i_cp, top)
+                    bot = max(i_cp, bot)
+                    if 0 <= i_cp < m and 0 <= j_cp < n and not visit[i_cp][j_cp]:
+                        if grid[i_cp][j_cp] != 0:
+                            queue.append([i_cp + 1, j_cp])
+                            queue.append([i_cp - 1, j_cp])
+                visit[i_cp][j_cp] = 1
 
-        # # img_show
-        # level_show = 4
-        # img = slide.read_region((0, 0), level_show,
-        #                 tuple([int(i / 2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
-        # img = img.resize(slide.level_dimensions[level_show])
-        # img_draw = ImageDraw.ImageDraw(img)
+            if  top < bot and left < right:
+                count += 1
+                pixel_area = (right - left + 1) * (bot - top + 1)
+                result.append([count, (max(0, left), max(0, top)), (min(right + 1, n), min(bot + 1, m)), pixel_area])
+            # compute pixel area by split_coord
+    return result
 
-        # scale_show = [slide.level_dimensions[level_show][i] / slide.level_dimensions[level][i] for i in range(2)]
-        # result_show = [[i[0], (int(i[1][0] * scale_show[0]), int(i[1][1] * scale_show[1])), \
-        #                     (int(i[2][0] * scale_show[0]), int(i[2][1] * scale_show[1]))] for i in result]
-        # for info in result_show:
-        #     pixel_area = (info[2][0] - info[1][0] + 1) * (info[2][1] - info[1][1] + 1)
-        #     if pixel_area < (window_size_threshold[0] * window_size_threshold[1]) / (2**(level_show-level))**2:
-        #         continue
-        #     else:
-        #         img_draw.rectangle((info[1],info[2]), fill=None, outline='blue', width=5)
-        # img = img.resize(slide.level_dimensions[4])
-        # img.save(os.path.join('/media/ps/passport2/hhy/camelyon16/train/crop_split_l{}/'.format(level), \
-        #                          os.path.basename(img_file).split('.')[0] + '.png'))
-
-    with open(os.path.join(output_dir, 'results.json'), 'w') as result_file:
-        json.dump(save_dict, result_file)
-
-def save_cropped_result(img_array, window_size_threshold, level, density_prob_threshold, output_dir):
+def save_cropped_result(img_array, max_window_size, min_window_size, dens_prob_thres, dens_dir, output_dir, 
+                        densmap_level, output_level, vis_level = 6):
     """
     A wrapper to conduct all necessary operation for generating density crops
     :param img_array: The input image to crop on
@@ -171,48 +123,53 @@ def save_cropped_result(img_array, window_size_threshold, level, density_prob_th
     :return:
     """
     save_dict = {}
+    time_total = 0.0
     for img_file in tqdm(img_array, total=len(img_array)):
         slide = openslide.OpenSlide(img_file)
+        overlay_map = np.load(os.path.join(dens_dir, os.path.basename(img_file).replace("tif", "npy")))
+        overlay_map = ((overlay_map / 255) > dens_prob_thres) * 255
 
-        overlay_map = np.load(img_file.replace("tumor/", "dens_map_sliding_l3/").replace("tif", "npy"))
-        level_size = tuple([int(i / 2**6) for i in slide.level_dimensions[0]])
-        overlay_map = Image.fromarray(overlay_map.transpose()).resize(level_size)
-        overlay_map = ((np.asarray(overlay_map).transpose() / 255) > density_prob_threshold) * 255
+        time_now = time.time()
+        result = split_overlay_map(overlay_map, max_window_size, densmap_level, output_level)
+        time_total += time.time() - time_now
 
-        result = split_overlay_map(overlay_map, level)
-        scale = 2 ** (6 - level)
-        result_save = [[i[0], (int(i[1][1] * scale), int(i[1][0] * scale)), \
-                            (int(i[2][1] * scale), int(i[2][0] * scale))] for i in result]
+        scale_save = 2 ** (densmap_level - output_level)
+        result_save = [[i[0], (int(i[1][1] * scale_save), int(i[1][0] * scale_save)), \
+                            (int(i[2][1] * scale_save), int(i[2][0] * scale_save))] for i in result]
         
         # save dict
-        new_result = []
+        new_result_save = []
         for info in result_save:
-            pixel_area = (info[2][0] - info[1][0] + 1) * (info[2][1] - info[1][1] + 1)
-            if pixel_area < window_size_threshold[0] * window_size_threshold[1]:
-                continue
+            if info[2][0] - info[1][0] < min_window_size[0]:
+                left = int((info[2][0] + info[1][0]) / 2 - min_window_size[0] / 2)
+                right = int((info[2][0] + info[1][0]) / 2 + min_window_size[0] / 2)
             else:
-                new_result.append((info[1], info[2], pixel_area))
-        save_dict.update({img_file: new_result})
+                left, right = info[1][0], info[2][0]
+
+            if info[2][1] - info[1][1] < min_window_size[1]:
+                top = int((info[2][1] + info[1][1]) / 2 - min_window_size[1] / 2)
+                bot = int((info[2][1] + info[1][1]) / 2 + min_window_size[1] / 2)
+            else:
+                top, bot = info[1][1], info[2][1]
+
+            new_result_save.append([info[0], [left, top], [right, bot], (right - left) * (bot - top)])
+
+        save_dict.update({img_file: new_result_save})
 
         # img_show
-        level_show = 4
-        img = slide.read_region((0, 0), level_show,
-                        tuple([int(i / 2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
+        scale_show = 2 ** (output_level - vis_level)
+        # img = slide.read_region((0, 0), vis_level,
+        #                 tuple([int(i / 2**vis_level) for i in slide.level_dimensions[0]])).convert('RGB')
+        img = Image.open(os.path.join(dens_dir, os.path.basename(img_file).replace('.tif','_heat.png')))
         img_draw = ImageDraw.ImageDraw(img)
-
-        scale_show = 2 ** (6 - level_show)
-        result_show = [[i[0], (int(i[1][1] * scale_show), int(i[1][0] * scale_show)), \
-                            (int(i[2][1] * scale_show), int(i[2][0] * scale_show))] for i in result]
+        result_show = [[i[0], (int(i[1][0] * scale_show), int(i[1][1] * scale_show)), \
+                            (int(i[2][0] * scale_show), int(i[2][1] * scale_show))] for i in new_result_save]
         for info in result_show:
-            pixel_area = (info[2][0] - info[1][0] + 1) * (info[2][1] - info[1][1] + 1)
-            if pixel_area < (window_size_threshold[0] * window_size_threshold[1]) / (2**(level_show-level))**2:
-                continue
-            else:
-                img_draw.rectangle((info[1],info[2]), fill=None, outline='blue', width=5)
-        img = img.resize(slide.level_dimensions[4])
-        img.save(os.path.join('/media/ps/passport2/hhy/camelyon16/train/crop_split_l{}/'.format(level), \
-                                 os.path.basename(img_file).split('.')[0] + '.png'))
+            img_draw.rectangle((info[1],info[2]), fill=None, outline='blue', width=1)
+        img.save(os.path.join(output_dir, os.path.basename(img_file).split('.')[0] + '.png'))
 
+    time_avg = time_total / len(img_array)
+    print("Preprocessing -- crop split time: {} fps".format(time_avg))
     with open(os.path.join(output_dir, 'results.json'), 'w') as result_file:
         json.dump(save_dict, result_file)
 
@@ -294,7 +251,7 @@ def NMM(boxes, iouthreshold):
 
     # compute the area of the bounding boxes and sort the bounding
     # boxes by the bottom-right y-coordinate of the bounding box
-    area = (x2 - x1 + 1) * (y2 - y1 + 1)
+    area = (x2 - x1) * (y2 - y1)
     idxs = list(reversed(range(len(area))))  # np.argsort(y2)
     # keep looping while some indexes still remain in the indexes
     # list
@@ -315,8 +272,8 @@ def NMM(boxes, iouthreshold):
         yy2 = np.minimum(y2[i], y2[idxs[:last]])
 
         # compute the width and height of the bounding box
-        w = np.maximum(0, xx2 - xx1 + 1)
-        h = np.maximum(0, yy2 - yy1 + 1)
+        w = np.maximum(0, xx2 - xx1)
+        h = np.maximum(0, yy2 - yy1)
 
         # compute the ratio of overlap
         overlap = (w * h) / area[idxs[:last]]
@@ -330,13 +287,13 @@ def NMM(boxes, iouthreshold):
         xx2 = np.amax(x2[idxs[delete_idxs]])
         yy2 = np.amax(y2[idxs[delete_idxs]])
 
-        cluster_dict = {'cluster_box':[int(xx1), int(yy1), int(xx2-xx1+1), int(yy2-yy1+1)]}
+        cluster_dict = {'cluster_box':[int(xx1), int(yy1), int(xx2-xx1), int(yy2-yy1)]}
         child_list = []
         for box_idx in delete_idxs:
             child_box_x1 = x1[idxs[box_idx]]
             child_box_y1 = y1[idxs[box_idx]]
-            child_box_w = x2[idxs[box_idx]] - x1[idxs[box_idx]] + 1
-            child_box_h = y2[idxs[box_idx]] - y1[idxs[box_idx]] + 1
+            child_box_w = x2[idxs[box_idx]] - x1[idxs[box_idx]]
+            child_box_h = y2[idxs[box_idx]] - y1[idxs[box_idx]]
             child_list.append({'cluster_box': [int(child_box_x1), int(child_box_y1), int(child_box_w), int(child_box_h)]})
         cluster_dict.update({'child': child_list})
         cluster_boxes.append(cluster_dict)

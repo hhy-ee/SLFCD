@@ -29,13 +29,23 @@ python density_slide_window_official.py . height_width threshld --output_folder 
 def parse_args():
     parser = argparse.ArgumentParser(
         description='DMNet--Generate density crops from given density map')
-    parser.add_argument('root_dir', default=".",
-                        help='the path for source data')
-    parser.add_argument('window_size_threshold', help='The size of kernel, format: h_w')
-    parser.add_argument('density_prob_threshold', type=float, help='Threshold defined to select the cropped region')
-    parser.add_argument('--output_folder', help='The dir to save generated images and annotations')
-    args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/train', '50_50', '0.5'])
-    args.output_folder = '/media/ps/passport2/hhy/camelyon16/train/crop_split_l3'
+    parser.add_argument('wsi_path', default=".", help='the path for source tif data')
+    parser.add_argument('densmap_path', default=".", help='the path for density map data')
+    parser.add_argument('output_path', default=".", help='the path for save data')
+    parser.add_argument('--max_window_size', help='The size of max kernel, format: h_w')
+    parser.add_argument('--min_window_size', help='The size of min kernel, format: h_w')
+    parser.add_argument('--dens_prob_thres', type=float, help='Threshold defined to select the cropped region')
+    
+
+    # args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/train', '50_50', '0.5'])
+    # args.output_folder = '/media/ps/passport2/hhy/camelyon16/train/crop_split_l3'
+
+    args = parser.parse_args(['/media/hy/hhy_data/camelyon16/train/tumor', 
+                              '/media/hy/hhy_data/camelyon16/train/dens_map_ncrf_l8',
+                              '/media/hy/hhy_data/camelyon16/train/crop_split_ncrf_l0'])
+    args.max_window_size = '4096_4096'
+    args.min_window_size = '128_128'
+    args.dens_prob_thres = 0.1
     return args
 
 
@@ -45,14 +55,16 @@ if __name__ == "__main__":
     # to work in mcnn, need to copy generated folder to mcnn
     # then run two files. Change root to crop_data_mcnn accordingly
     args = parse_args()
-    root_dir = args.root_dir
-    folder_name = args.output_folder
-    level = int(args.output_folder.split('l')[-1])
-
-    img_array = glob.glob(f'{root_dir}/{"tumor"}/*.tif')
-    anno_path = glob.glob(f'{root_dir}/{"dens_map_sliding_l{}".format(level)}/*.npy')
+    folder_name = args.output_path
+    output_level = int(args.output_path.split('l')[-1])
+    densmap_level = int(args.densmap_path.split('l')[-1])
+    img_array = glob.glob(f'{args.wsi_path}/*.tif')
+    anno_path = glob.glob(f'{args.densmap_path}/*.npy')
     if not os.path.exists(folder_name):
         os.makedirs(folder_name, exist_ok=False)
-    window_size_threshold = args.window_size_threshold.split("_")
-    window_size_threshold = (int(window_size_threshold[0]), int(window_size_threshold[1]))
-    save_cropped_result(img_array, window_size_threshold, level, args.density_prob_threshold, args.output_folder)
+    max_window_size = args.max_window_size.split("_")
+    max_window_size = (int(max_window_size[0]), int(max_window_size[1]))
+    min_window_size = args.min_window_size.split("_")
+    min_window_size = (int(min_window_size[0]), int(min_window_size[1]))
+    save_cropped_result(img_array, max_window_size, min_window_size, args.dens_prob_thres, \
+                        args.densmap_path, args.output_path, densmap_level, output_level)
