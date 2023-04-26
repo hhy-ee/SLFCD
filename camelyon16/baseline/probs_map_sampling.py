@@ -62,7 +62,7 @@ def get_probs_map(model, slide, level, dataloader):
     time_now = time.time()
     time_total = 0.
     with torch.no_grad():
-        for (data, rect) in dataloader:
+        for (data, rect, shape) in dataloader:
             data = Variable(data.cuda(non_blocking=True))
             output = model(data)
             # because of torch.squeeze at the end of forward in resnet.py, if the
@@ -71,7 +71,8 @@ def get_probs_map(model, slide, level, dataloader):
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
             for bs in range(probs.shape[0]):
                 denominator[rect[0][bs]:rect[2][bs], rect[1][bs]:rect[3][bs]] += 1
-                probs_map[rect[0][bs]:rect[2][bs], rect[1][bs]:rect[3][bs]] += probs[bs, 0, :, :]
+                probs_map[rect[0][bs]:rect[2][bs], rect[1][bs]:rect[3][bs]] += \
+                        probs[bs, 0, shape[0][bs]:shape[2][bs], shape[1][bs]:shape[3][bs]]
             count += 1
             time_spent = time.time() - time_now
             time_now = time.time()
@@ -111,7 +112,7 @@ def run(args):
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(sample_level)))
     time_total = 0.0
     for file in dir:
-        if os.path.exists(os.path.join(args.probs_map_path, file)):
+        if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(ckpt_level), file)):
             continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(sample_level), file.split('.')[0]+'.npy'))
@@ -195,11 +196,11 @@ def main():
     # args.GPU = "1"
     
     args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/test/images", # wsi_path
-        "/home/ps/hhy/slfcd/save_train/train_base_l1", # ckpt_path
-        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json", # cnn_path
+        "/media/ps/passport2/hhy/camelyon16/test/images",
+        "/home/ps/hhy/slfcd/save_train/train_base_l1",
+        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
         '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l8']) 
-    args.GPU = "2"
+    args.GPU = "3"
     run(args)
 
 

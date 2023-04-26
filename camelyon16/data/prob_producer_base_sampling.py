@@ -12,6 +12,7 @@ class WSIPatchDataset(Dataset):
         self._sample_level = sample_level
         self._ckpt_level = ckpt_level
         self._patch_size = image_size
+        self._image_size = tuple([int(i / 2**ckpt_level) for i in slide.level_dimensions[0]])
         self._normalize = normalize
         self._flip = flip
         self._rotate = rotate
@@ -55,7 +56,15 @@ class WSIPatchDataset(Dataset):
         
         if self._normalize:
             img = (img - 128.0) / 128.0
-
-        return (img, (x_center - self._patch_size // 2, y_center - self._patch_size // 2, \
-                            x_center + self._patch_size // 2, y_center + self._patch_size // 2))
+        
+        left = max(x_center - self._patch_size // 2, 0)
+        right = min(x_center + self._patch_size // 2, self._image_size[0])
+        top = max(y_center - self._patch_size // 2, 0)
+        bot = min(y_center + self._patch_size // 2, self._image_size[1])
+        
+        l = left - (x_center - self._patch_size // 2)
+        r = l + right - left
+        t = top - (y_center - self._patch_size // 2)
+        b = t + bot - top
+        return (img, (left, top, right, bot), (l, t, r, b))
         

@@ -111,8 +111,8 @@ def run(args):
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level)))
     time_total = 0.0
     for file in dir:
-        # if os.path.exists(os.path.join(args.probs_map_path, file)):
-        #     continue
+        if os.path.exists(os.path.join(args.probs_map_path, file)):
+            continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level), file.split('.')[0]+'.npy'))
         ckpt = torch.load(args.ckpt_path)
@@ -194,12 +194,19 @@ def main():
     #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l5'])
     
     args = parser.parse_args([
-        "/media/hy/hhy_data/camelyon16/train/tumor",
-        "/media/ruiq/Data/hhy/SLFCD/save_train/train_ncrf/resnet18_base.ckpt",
-        "/media/ruiq/Data/hhy/SLFCD/camelyon16/configs/cnn_ncrf.json",
-        '/media/hy/hhy_data/camelyon16/train/dens_map_ncrf_l5'])
+        "/media/ps/passport2/hhy/camelyon16/test/images",
+        "/home/ps/hhy/slfcd/save_train/train_ncrf/resnet18_base.ckpt",
+        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_ncrf.json",
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l5'])
+    args.GPU = "2"
     
-    args.GPU = "1"
+    # args = parser.parse_args([
+    #     "/media/hy/hhy_data/camelyon16/train/tumor",
+    #     "/media/ruiq/Data/hhy/SLFCD/save_train/train_ncrf/resnet18_base.ckpt",
+    #     "/media/ruiq/Data/hhy/SLFCD/camelyon16/configs/cnn_ncrf.json",
+    #     '/media/hy/hhy_data/camelyon16/train/dens_map_ncrf_l5'])
+    # args.GPU = "1"
+    
     run(args)
 
 
