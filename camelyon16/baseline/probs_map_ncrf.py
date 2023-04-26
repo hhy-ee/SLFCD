@@ -94,8 +94,7 @@ def make_dataloader(args, cnn, slide, tissue, flip='NONE', rotate='NONE'):
     num_workers = args.num_workers
     
     dataloader = DataLoader(
-        WSIPatchDataset(slide, tissue, args.overlap, 
-                        image_size=cnn['patch_inf_size'],
+        WSIPatchDataset(slide, tissue, image_size=cnn['patch_inf_size'],
                         normalize=True, flip=flip, rotate=rotate),
         batch_size=batch_size, num_workers=num_workers, drop_last=False)
 
@@ -109,11 +108,11 @@ def run(args):
     with open(args.cnn_path) as f:
         cnn = json.load(f)
     level = int(args.probs_map_path.split('l')[-1])
-    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tumor_mask_l{}'.format(level)))
+    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level)))
     time_total = 0.0
     for file in dir:
-        if os.path.exists(os.path.join(args.probs_map_path, file)):
-            continue
+        # if os.path.exists(os.path.join(args.probs_map_path, file)):
+        #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level), file.split('.')[0]+'.npy'))
         ckpt = torch.load(args.ckpt_path)

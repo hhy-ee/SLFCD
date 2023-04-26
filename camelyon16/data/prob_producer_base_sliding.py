@@ -80,34 +80,3 @@ class WSIPatchDataset(Dataset):
             return (img, (x, y, x + self._patch_size, y + self._patch_size), (x_size, y_size), True)
         else:
             return (img, (x, y, x + self._patch_size, y + self._patch_size), (x_size, y_size), False)
-
-
-        # if np.asarray(patch_tissue).any():
-        #     self._keep = True
-        # else:
-        #     self._keep = False
-        # return (img, (x, y, x + self._patch_size, y + self._patch_size), (x_size, y_size))
-        
-    # def __getitem__(self, idx):
-    #     img = self._img
-
-    #     if self._flip == 'FLIP_LEFT_RIGHT':
-    #         img = img.transpose(PIL.Image.FLIP_LEFT_RIGHT)
-
-    #     if self._rotate == 'ROTATE_90':
-    #         img = img.transpose(PIL.Image.ROTATE_90)
-
-    #     if self._rotate == 'ROTATE_180':
-    #         img = img.transpose(PIL.Image.ROTATE_180)
-
-    #     if self._rotate == 'ROTATE_270':
-    #         img = img.transpose(PIL.Image.ROTATE_270)
-
-    #         # PIL image:   H x W x C
-    #         # torch image: C X H X W
-    #     img = np.array(img, dtype=np.float32).transpose((2, 0, 1))
-
-    #     if self._normalize:
-    #         img = (img - 128.0) / 128.0
-
-    #     return (img, (0, 0, self._slide.level_dimensions[self._level][0], self._slide.level_dimensions[self._level][1]))
