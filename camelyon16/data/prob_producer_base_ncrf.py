@@ -5,13 +5,11 @@ import PIL
 
 class WSIPatchDataset(Dataset):
 
-    def __init__(self, slide, tissue, overlap, image_size=256,
+    def __init__(self, slide, tissue, image_size=256,
                  normalize=True, flip='NONE', rotate='NONE'):
         self._slide = slide
         self._tissue = tissue
-        self._overlap = overlap
         self._patch_size = image_size
-        self._interval = int(self._patch_size * (1-self._overlap))
         self._normalize = normalize
         self._flip = flip
         self._rotate = rotate
@@ -85,34 +83,3 @@ class WSIPatchDataset(Dataset):
         img_flat[0] = img[:, x_start:x_end, y_start:y_end]
 
         return (img_flat, x_mask, y_mask)
-
-
-        # if np.asarray(patch_tissue).any():
-        #     self._keep = True
-        # else:
-        #     self._keep = False
-        # return (img, (x, y, x + self._patch_size, y + self._patch_size), (x_size, y_size))
-        
-    # def __getitem__(self, idx):
-    #     img = self._img
-
-    #     if self._flip == 'FLIP_LEFT_RIGHT':
-    #         img = img.transpose(PIL.Image.FLIP_LEFT_RIGHT)
-
-    #     if self._rotate == 'ROTATE_90':
-    #         img = img.transpose(PIL.Image.ROTATE_90)
-
-    #     if self._rotate == 'ROTATE_180':
-    #         img = img.transpose(PIL.Image.ROTATE_180)
-
-    #     if self._rotate == 'ROTATE_270':
-    #         img = img.transpose(PIL.Image.ROTATE_270)
-
-    #         # PIL image:   H x W x C
-    #         # torch image: C X H X W
-    #     img = np.array(img, dtype=np.float32).transpose((2, 0, 1))
-
-    #     if self._normalize:
-    #         img = (img - 128.0) / 128.0
-
-    #     return (img, (0, 0, self._slide.level_dimensions[self._level][0], self._slide.level_dimensions[self._level][1]))
