@@ -55,7 +55,7 @@ def chose_model(mod):
 def get_probs_map(model, slide, level, dataloader):
 
     probs_map = np.zeros(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
-    denominator = np.zeros(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
+    counter = np.zeros(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
     num_batch = len(dataloader)
 
     count = 0
@@ -70,7 +70,7 @@ def get_probs_map(model, slide, level, dataloader):
             # should be fixed in resnet.py by specifying torch.squeeze(dim=2) later
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
             for bs in range(probs.shape[0]):
-                denominator[rect[0][bs]:rect[2][bs], rect[1][bs]:rect[3][bs]] += 1
+                counter[rect[0][bs]:rect[2][bs], rect[1][bs]:rect[3][bs]] += 1
                 probs_map[rect[0][bs]:rect[2][bs], rect[1][bs]:rect[3][bs]] += \
                         probs[bs, 0, shape[0][bs]:shape[2][bs], shape[1][bs]:shape[3][bs]]
             count += 1
@@ -82,8 +82,14 @@ def get_probs_map(model, slide, level, dataloader):
                     time.strftime("%Y-%m-%d %H:%M:%S"), dataloader.dataset._flip,
                     dataloader.dataset._rotate, count, num_batch, time_spent))
             time_total += time_spent
-        denominator = denominator + (denominator < 1)*1
-        probs_map = probs_map / denominator
+
+        zero_mask = counter == 0
+        probs_map[~zero_mask] = probs_map[~zero_mask] / counter[~zero_mask]
+        del counter
+
+        # counter = counter + (counter < 1)*1
+        # probs_map = probs_map / counter
+        
         logging.info('Total Network Run Time : {:.4f}'.format(time_total))
     return probs_map, time_total
 
@@ -197,19 +203,19 @@ def main():
     #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l1'])
     # args.GPU = "1"
     
-    args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/test/images",
-        "/home/ps/hhy/slfcd/save_train/train_base_l1",
-        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l8']) 
-    args.GPU = "2"
-
     # args = parser.parse_args([
-    #     "/media/hy/hhy_data/camelyon16/train/tumor",
-    #     "/media/ruiq/Data/hhy/SLFCD/save_train/train_base_l1",
-    #     "/media/ruiq/Data/hhy/SLFCD/camelyon16/configs/cnn_base_l1.json",
-    #     '/media/hy/hhy_data/camelyon16/train/dens_map_sliding_l8']) 
-    # args.GPU = "1"
+    #     "/media/ps/passport2/hhy/camelyon16/test/images",
+    #     "/home/ps/hhy/slfcd/save_train/train_base_l1",
+    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
+    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l8']) 
+    # args.GPU = "2"
+
+    args = parser.parse_args([
+        "/media/hy/hhy_data/camelyon16/train/tumor",
+        "/media/ruiq/Data/hhy/SLFCD/save_train/train_base_l1",
+        "/media/ruiq/Data/hhy/SLFCD/camelyon16/configs/cnn_base_l1.json",
+        '/media/hy/hhy_data/camelyon16/train/dens_map_sliding_l8']) 
+    args.GPU = "1"
     
     run(args)
 

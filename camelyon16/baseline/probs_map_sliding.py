@@ -55,7 +55,7 @@ def chose_model(mod):
 def get_probs_map(model, slide, level, dataloader):
 
     probs_map = np.zeros(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
-    denominator = np.zeros(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
+    counter = np.zeros(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
     num_batch = len(dataloader)
 
     count = 0
@@ -73,7 +73,7 @@ def get_probs_map(model, slide, level, dataloader):
             # should be fixed in resnet.py by specifying torch.squeeze(dim=2) later
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
             for bs in range(probs.shape[0]):
-                denominator[rect[0][keep][bs]:rect[2][keep][bs], rect[1][keep][bs]:rect[3][keep][bs]] += 1
+                counter[rect[0][keep][bs]:rect[2][keep][bs], rect[1][keep][bs]:rect[3][keep][bs]] += 1
                 probs_map[rect[0][keep][bs]:rect[2][keep][bs], rect[1][keep][bs]:rect[3][keep][bs]] += \
                     probs[bs, 0, :shape[0][keep][bs], :shape[1][keep][bs]]
             
@@ -85,8 +85,11 @@ def get_probs_map(model, slide, level, dataloader):
                     time.strftime("%Y-%m-%d %H:%M:%S"), dataloader.dataset._flip,
                     dataloader.dataset._rotate, count, num_batch, time_spent))
             time_total += time_spent
-        denominator = denominator + (denominator < 1)*1
-        probs_map = probs_map / denominator
+        
+        zero_mask = counter == 0
+        probs_map[~zero_mask] = probs_map[~zero_mask] / counter[~zero_mask]
+        del counter
+
         logging.info('Total Network Run Time : {:.4f}'.format(time_total))
     return probs_map, time_total
 
