@@ -111,13 +111,14 @@ def run(args):
     with open(args.cnn_path) as f:
         cnn = json.load(f)
     level = int(args.probs_map_path.split('l')[-1])
-    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level)))
+    tissue_level = 5
+    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(tissue_level)))
     time_total = 0.0
     for file in dir:
         if os.path.exists(os.path.join(args.probs_map_path, file)):
             continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
-        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level), file.split('.')[0]+'.npy'))
+        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(tissue_level), file.split('.')[0]+'.npy'))
         ckpt = torch.load(args.ckpt_path)
         model = chose_model(cnn['model'])
         model.load_state_dict(ckpt['state_dict'])

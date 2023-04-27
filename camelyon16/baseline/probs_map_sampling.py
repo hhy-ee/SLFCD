@@ -202,7 +202,7 @@ def main():
         "/home/ps/hhy/slfcd/save_train/train_base_l1",
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
         '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l8']) 
-    args.GPU = "2"
+    args.GPU = "0"
 
     # args = parser.parse_args([
     #     "/media/hy/hhy_data/camelyon16/train/tumor",

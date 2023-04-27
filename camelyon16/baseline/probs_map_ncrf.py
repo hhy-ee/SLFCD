@@ -196,7 +196,7 @@ def main():
         "/media/ps/passport2/hhy/camelyon16/test/images",
         "/home/ps/hhy/slfcd/save_train/train_ncrf/resnet18_base.ckpt",
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_ncrf.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l5'])
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l6'])
     args.GPU = "2"
     
     # args = parser.parse_args([
