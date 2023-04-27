@@ -63,7 +63,7 @@ def main():
     #     "/media/ps/passport2/hhy/camelyon16/test/tissue_mask_l5"])
     
     args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/train/normal",
+        "/media/ps/passport2/hhy/camelyon16/train/tumor",
         "/media/ps/passport2/hhy/camelyon16/train/tissue_mask_l5"])
     
     run(args)

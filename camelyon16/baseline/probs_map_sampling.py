@@ -161,17 +161,19 @@ def run(args):
 
             probs_map /= 8
 
-        tissue_mask = Image.fromarray(tissue.transpose()).resize(probs_map.shape)
-        probs_map = probs_map * np.asarray(tissue_mask).transpose()
-        # probs_map = cv2.GaussianBlur((probs_map * 255).astype(np.uint8), (13,13), 11)
-        probs_map = (probs_map * 255).astype(np.uint8)
-        np.save(os.path.join(args.probs_map_path, 'model_l{}'.format(ckpt_level), file.split('.')[0] + '.npy'), probs_map)
+        level_save = 5
+        shape_save = tuple([int(i/2**level_save) for i in slide.level_dimensions[0]])
+        probs_mask = cv2.resize((probs_map * 255).astype(np.uint8), (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
+        tissue_mask = cv2.resize((tissue * 255).astype(np.uint8), (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
+        # probs_map = cv2.GaussianBlur(probs_map, (13,13), 11)
+        probs_mask = probs_mask * (tissue_mask > 128)
+        np.save(os.path.join(args.probs_map_path, 'model_l{}'.format(ckpt_level), file.split('.')[0] + '.npy'), probs_mask)
 
         level_show = 6
         img_rgb = slide.read_region((0, 0), level_show, tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
         img_rgb = np.asarray(img_rgb).transpose((1,0,2))
-        probs_img_rgb = Image.fromarray(probs_map.transpose()).resize(img_rgb.shape[:2])
-        probs_img_rgb= cv2.applyColorMap(np.asarray(probs_img_rgb).transpose(), cv2.COLORMAP_JET)
+        probs_img_rgb = cv2.resize(probs_mask, (img_rgb.shape[1], img_rgb.shape[0]), interpolation=cv2.INTER_CUBIC)
+        probs_img_rgb = cv2.applyColorMap(probs_img_rgb, cv2.COLORMAP_JET)
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_map_path, 'model_l{}'.format(ckpt_level), file.split('.')[0] + '_heat.png'), heat_img)
@@ -195,19 +197,19 @@ def main():
     #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l1'])
     # args.GPU = "1"
     
-    # args = parser.parse_args([
-    #     "/media/ps/passport2/hhy/camelyon16/test/images",
-    #     "/home/ps/hhy/slfcd/save_train/train_base_l1",
-    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
-    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l8']) 
-    # args.GPU = "3"
-
     args = parser.parse_args([
-        "/media/hy/hhy_data/camelyon16/train/tumor",
-        "/media/ruiq/Data/hhy/SLFCD/save_train/train_base_l1",
-        "/media/ruiq/Data/hhy/SLFCD/camelyon16/configs/cnn_base_l1.json",
-        '/media/hy/hhy_data/camelyon16/train/dens_map_sliding_l8']) 
-    args.GPU = "1"
+        "/media/ps/passport2/hhy/camelyon16/test/images",
+        "/home/ps/hhy/slfcd/save_train/train_base_l1",
+        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l8']) 
+    args.GPU = "2"
+
+    # args = parser.parse_args([
+    #     "/media/hy/hhy_data/camelyon16/train/tumor",
+    #     "/media/ruiq/Data/hhy/SLFCD/save_train/train_base_l1",
+    #     "/media/ruiq/Data/hhy/SLFCD/camelyon16/configs/cnn_base_l1.json",
+    #     '/media/hy/hhy_data/camelyon16/train/dens_map_sliding_l8']) 
+    # args.GPU = "1"
     
     run(args)
 

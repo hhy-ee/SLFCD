@@ -162,17 +162,16 @@ def run(args):
 
             probs_map /= 8
 
-        tissue_mask = Image.fromarray(tissue.transpose()).resize(probs_map.shape)
-        probs_map = probs_map * np.asarray(tissue_mask).transpose()
+        tissue_mask = cv2.resize((tissue * 255).astype(np.uint8), (probs_map.shape[1], probs_map.shape[0]), interpolation=cv2.INTER_CUBIC)
+        probs_mask = (probs_map * 255).astype(np.uint8) * (tissue_mask > 128)
         # probs_map = cv2.GaussianBlur((probs_map * 255).astype(np.uint8), (13,13), 11)
-        probs_map = (probs_map * 255).astype(np.uint8)
-        np.save(os.path.join(args.probs_map_path, file.split('.')[0] + '.npy'), probs_map)
+        np.save(os.path.join(args.probs_map_path, file.split('.')[0] + '.npy'), probs_mask)
 
         level_show = 6
-        img_rgb = slide.read_region((0, 0), level_show, tuple([int(i / 2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
+        img_rgb = slide.read_region((0, 0), level_show, tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
         img_rgb = np.asarray(img_rgb).transpose((1,0,2))
-        probs_img_rgb = Image.fromarray(probs_map.transpose()).resize(img_rgb.shape[:2])
-        probs_img_rgb= cv2.applyColorMap(np.asarray(probs_img_rgb).transpose(), cv2.COLORMAP_JET)
+        probs_img_rgb = cv2.resize(probs_mask, (img_rgb.shape[1], img_rgb.shape[0]), interpolation=cv2.INTER_CUBIC)
+        probs_img_rgb = cv2.applyColorMap(probs_img_rgb, cv2.COLORMAP_JET)
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_map_path, file.split('.')[0] + '_heat.png'), heat_img)
