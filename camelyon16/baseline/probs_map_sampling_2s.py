@@ -34,6 +34,8 @@ parser.add_argument('cnn_path', default=None, metavar='CNN_PATH', type=str,
                     ' the ckpt file')
 parser.add_argument('probs_map_path', default=None, metavar='PROBS_MAP_PATH',
                     type=str, help='Path to the output probs_map numpy file')
+parser.add_argument('roi_generator', default=None, metavar='ROI_GENERATOR',
+                    type=str, help='type of the generator of the first stage')
 parser.add_argument('--GPU', default='1', type=str, help='which GPU to use'
                     ', default 0')
 parser.add_argument('--num_workers', default=0, type=int, help='number of '
@@ -86,7 +88,7 @@ def get_probs_map(model, slide, level, dataloader):
         zero_mask = counter == 0
         probs_map[~zero_mask] = probs_map[~zero_mask] / counter[~zero_mask]
         del counter
-  
+        
         logging.info('Total Network Run Time : {:.4f}'.format(time_total))
     return probs_map, time_total
 
@@ -115,10 +117,23 @@ def run(args):
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(sample_level)))
     time_total = 0.0
     for file in dir:
-        if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(ckpt_level), file)):
-            continue
+        # if os.path.exists(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, ckpt_level), file)):
+        #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
-        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(sample_level), file.split('.')[0]+'.npy'))
+        
+        if args.roi_generator == 'sampling':
+            tissue = np.load(os.path.join(os.path.dirname(args.probs_map_path), 'dens_map_sampling_l8', \
+                            'model_l{}'.format(ckpt_level), file))
+            tissue_shape = tuple([int(i / 2**sample_level) for i in slide.level_dimensions[0]])
+            tissue = cv2.resize(tissue, (tissue_shape[1], tissue_shape[0]), interpolation=cv2.INTER_CUBIC)
+            tissue = tissue > 127
+        elif args.roi_generator == 'ncrf':
+            tissue = np.load(os.path.join(os.path.dirname(args.probs_map_path), 'dens_map_ncrf_l8', file))
+            tissue_shape = tuple([int(i / 2**sample_level) for i in slide.level_dimensions[0]])
+            tissue = cv2.resize(tissue, (tissue_shape[1], tissue_shape[0]), interpolation=cv2.INTER_CUBIC)
+            tissue = tissue > 26
+        
+        
         ckpt = torch.load(os.path.join(args.ckpt_path, 'best.ckpt'))
         model = chose_model(cnn['model'])
         model.load_state_dict(ckpt['state_dict'])
@@ -170,7 +185,7 @@ def run(args):
         tissue_mask = cv2.resize((tissue * 255).astype(np.uint8), (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
         # probs_map = cv2.GaussianBlur(probs_map, (13,13), 11)
         probs_mask = probs_mask * (tissue_mask > 128)
-        np.save(os.path.join(args.probs_map_path, 'model_l{}'.format(ckpt_level), file.split('.')[0] + '.npy'), probs_mask)
+        np.save(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, ckpt_level), file.split('.')[0] + '.npy'), probs_mask)
 
         level_show = 6
         img_rgb = slide.read_region((0, 0), level_show, tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
@@ -179,7 +194,7 @@ def run(args):
         probs_img_rgb = cv2.applyColorMap(probs_img_rgb, cv2.COLORMAP_JET)
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
-        cv2.imwrite(os.path.join(args.probs_map_path, 'model_l{}'.format(ckpt_level), file.split('.')[0] + '_heat.png'), heat_img)
+        cv2.imwrite(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, ckpt_level), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -193,25 +208,26 @@ def main():
     # args.overlap = 0
     # args.GPU = "1"
 
+    # args = parser.parse_args([
+    #     "/media/ps/passport2/hhy/camelyon16/test/images",
+    #     "/home/ps/hhy/slfcd/save_train/train_base_l1",
+    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
+    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l1'])
+    # args.GPU = "1"
+
     args = parser.parse_args([
         "/media/ps/passport2/hhy/camelyon16/test/images",
         "/home/ps/hhy/slfcd/save_train/train_base_l1",
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8'])
-    args.GPU = "1"
-
-    # args = parser.parse_args([
-    #     "/media/ps/passport2/hhy/camelyon16/test/images",
-    #     "/home/ps/hhy/slfcd/save_train/train_base_l0",
-    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l0.json",
-    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l6']) 
-    # args.GPU = "1"
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6'])
+    args.candidate_generator = 'ncrf'
+    args.GPU = "3"
 
     # args = parser.parse_args([
     #     "/media/hy/hhy_data/camelyon16/train/tumor",
     #     "/media/ruiq/Data/hhy/SLFCD/save_train/train_base_l1",
     #     "/media/ruiq/Data/hhy/SLFCD/camelyon16/configs/cnn_base_l1.json",
-    #     '/media/hy/hhy_data/camelyon16/train/dens_map_sampling_l8']) 
+    #     '/media/hy/hhy_data/camelyon16/train/dens_map_sliding_l8'])
     # args.GPU = "1"
     
     run(args)
