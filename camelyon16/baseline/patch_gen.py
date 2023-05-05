@@ -96,7 +96,7 @@ def run(args):
 
                 wsi_path = os.path.join(args.wsi_path, pid.split('_')[0], pid + '.tif')
                 slide = openslide.OpenSlide(wsi_path)
-                level = int(args.patch_path.split('l')[-1]) # 0
+                level = int(args.patch_path.split('l')[-1])
 
                 if 'tumor' in file:
                     tumor_mask = np.load(os.path.join(args.wsi_path, 'tumor_mask_l1', pid + '.npy')).transpose()

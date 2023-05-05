@@ -186,11 +186,16 @@ def run(args):
         summary_train = train_epoch(summary_train, summary_writer, cnn, model,
                                     loss_fn, optimizer,
                                     dataloader_train)
-        if (epoch + summary_train['epoch']) >= 20 and (epoch + summary_train['epoch']) % 5 ==0:
-            torch.save({'epoch': summary_train['epoch'],
+        # if (epoch + summary_train['epoch']) >= 20 and (epoch + summary_train['epoch']) % 5 ==0:
+        # if (epoch + summary_train['epoch']) >= 0 and (epoch + summary_train['epoch']) % 2 ==0:
+        #     torch.save({'epoch': summary_train['epoch'],
+        #                 'step': summary_train['step'],
+        #                 'state_dict': model.module.state_dict()},
+        #             os.path.join(args.save_path, 'train_e{}.ckpt'.format(epoch)))
+        torch.save({'epoch': summary_train['epoch'],
                         'step': summary_train['step'],
                         'state_dict': model.module.state_dict()},
-                    os.path.join(args.save_path, 'train_e{}.ckpt'.format(epoch)))
+                    os.path.join(args.save_path, 'train_e{}.ckpt'.format(summary_train['epoch'])))
 
         time_now = time.time()
         summary_valid = valid_epoch(summary_valid, model, loss_fn,
@@ -225,8 +230,8 @@ def main():
     args = parser.parse_args([
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l0.json",
         "/home/ps/hhy/slfcd/save_train/train_base_l0"])
-    args.device_ids = '1'
-    args.resume = False
+    args.device_ids = '0'
+    args.resume = True
     run(args)
 
 
