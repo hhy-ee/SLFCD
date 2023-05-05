@@ -42,18 +42,26 @@ def parse_args():
     parser.add_argument('output_path', help='The dir to save generated images and annotations')
     parser.add_argument('--iou_thres', type=float, help='Threshold defined to select the cropped region')
     parser.add_argument('--dens_thres', type=float, help='Threshold defined to generate embeddings')
+    parser.add_argument('--save_label', type=bool, help='Threshold defined to generate embeddings')
 
     # args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/train/crop_split_l3/results.json', 
     #                           '/media/ps/passport2/hhy/camelyon16/train/dens_map_sliding_l3',
     #                           '/media/ps/passport2/hhy/camelyon16/train/tumor_mask_l3/',
     #                           '/media/ps/passport2/hhy/camelyon16/train/crop_cluster_l3'])
     
-    args = parser.parse_args(['/media/hy/hhy_data/camelyon16/train/crop_split_ncrf_l1/results.json', 
-                              '/media/hy/hhy_data/camelyon16/train/dens_map_ncrf_l8',
-                              '/media/hy/hhy_data/camelyon16/train/tumor_mask_l1/',
-                              '/media/hy/hhy_data/camelyon16/train/crop_cluster_ncrf_l1'])
-    args.dens_thres = 0.1
+    # args = parser.parse_args(['/media/hy/hhy_data/camelyon16/train/crop_split_sliding_l1/results.json', 
+    #                           '/media/hy/hhy_data/camelyon16/train/dens_map_sliding_l8',
+    #                           '/media/hy/hhy_data/camelyon16/train/tumor_mask_l1/',
+    #                           '/media/hy/hhy_data/camelyon16/train/crop_cluster_sliding_l1'])
+    
+    args = parser.parse_args(['/media/hy/hhy_data/camelyon16/test/crop_split_ncrf_l1/results.json', 
+                              '/media/hy/hhy_data/camelyon16/test/dens_map_ncrf_l8',
+                              '/media/hy/hhy_data/camelyon16/test/tumor_mask_l1/',
+                              '/media/hy/hhy_data/camelyon16/test/crop_cluster_ncrf_l1'])
+    
+    args.dens_thres = 0.5
     args.iou_thres = 0.3
+    args.save_label = False
     return args
 
 
@@ -63,7 +71,8 @@ if __name__ == "__main__":
     save_dict = {}
     time_total = 0.0
 
-    dens_level = int(args.dens_path.split('l')[-1])
+    # dens_level = int(args.dens_path.split('l')[-1])
+    dens_level = 6
     output_level = int(args.output_path.split('l')[-1])
 
     with open(args.json_path, 'r') as f:
@@ -94,11 +103,14 @@ if __name__ == "__main__":
 
         # preprocessing -- NMM
         time_now = time.time()
+        if boxes.shape[0] == 0:
+            continue
         cluster_boxes_list, cluster_boxes_dict = NMM(boxes, args.iou_thres)
         time_total += time.time() - time_now
 
         # add annotation
-        label_map = np.load(os.path.join(args.label_path, os.path.basename(file_name).replace('.tif','.npy')))
+        if args.save_label:
+            label_map = np.load(os.path.join(args.label_path, os.path.basename(file_name).replace('.tif','.npy')))
         for i, cluster in enumerate(cluster_boxes_dict):
             total_area, num_object = 0, 0
             clu_box = cluster['cluster_box']
@@ -108,17 +120,23 @@ if __name__ == "__main__":
             s_b = int((clu_box[1]+clu_box[3]) * scale)
             dens_patch = dens_map[s_l: s_r, s_t: s_b]
             dens_patch = cv2.resize(dens_patch, (clu_box[3], clu_box[2]), interpolation=cv2.INTER_CUBIC)
+
             for obj in dens_patch:
                 total_area += int((obj > args.dens_thres).sum())
                 if (obj > args.dens_thres).sum() > 0:
                     num_object += 1
-            avg_area = total_area / num_object
-            cluster.update({"total_area": total_area, "avg_area": avg_area, "num_object": num_object})
-            label_patch = label_map[clu_box[0]:clu_box[0]+clu_box[2], clu_box[1]:clu_box[1]+clu_box[3]]
-            np.save(os.path.join(args.output_path, 'cluster_mask', \
-                                 '{}_clu_{}.npy'.format(os.path.basename(file_name).split('.')[0], i)), label_patch)
+            if num_object != 0:
+                avg_area = total_area / num_object
+            else:
+                avg_area = total_area
             
-            # illustration patches
+            cluster.update({"total_area": total_area, "avg_area": avg_area, "num_object": num_object})
+            if args.save_label:
+                label_patch = label_map[clu_box[0]:clu_box[0]+clu_box[2], clu_box[1]:clu_box[1]+clu_box[3]]
+                np.save(os.path.join(args.output_path, 'cluster_mask', \
+                                    '{}_clu_{}.npy'.format(os.path.basename(file_name).split('.')[0], i)), label_patch)
+            
+            # # image illustration of cluster patches
             # o_s_x1 = int(clu_box[0] * slide.level_downsamples[output_level])
             # o_s_y1 = int(clu_box[1] * slide.level_downsamples[output_level])
             # img_patch_rgb = slide.read_region((o_s_x1, o_s_y1), output_level, (clu_box[2], clu_box[3])).convert('RGB')
@@ -137,15 +155,21 @@ if __name__ == "__main__":
                 s_b = int((chi_box[1]+chi_box[3]) * scale)
                 dens_patch = dens_map[s_l: s_r, s_t: s_b]
                 dens_patch = cv2.resize(dens_patch, (chi_box[3], chi_box[2]), interpolation=cv2.INTER_CUBIC)
+
                 for obj in dens_patch:
                     total_area += int((obj > args.dens_thres).sum())
                     if (obj > args.dens_thres).sum() > 0:
                         num_object += 1
-                avg_area = total_area / num_object
+                if num_object != 0:
+                    avg_area = total_area / num_object
+                else:
+                    avg_area = total_area
+
                 child.update({"total_area": total_area, "avg_area": avg_area, "num_object": num_object})
-                label_patch = label_map[chi_box[0]:chi_box[0]+chi_box[2], chi_box[1]:chi_box[1]+chi_box[3]]
-                np.save(os.path.join(args.output_path, 'cluster_mask', \
-                                     '{}_clu_{}_chi_{}.npy'.format(os.path.basename(file_name).split('.')[0], i, j)), label_patch)
+                if args.save_label:
+                    label_patch = label_map[chi_box[0]:chi_box[0]+chi_box[2], chi_box[1]:chi_box[1]+chi_box[3]]
+                    np.save(os.path.join(args.output_path, 'cluster_mask', \
+                                        '{}_clu_{}_chi_{}.npy'.format(os.path.basename(file_name).split('.')[0], i, j)), label_patch)
         
         # image illustration
         level_show = 6
@@ -164,7 +188,7 @@ if __name__ == "__main__":
                     ((clu_box[0]-1+clu_box[2]) * scale_show, (clu_box[1]-1+clu_box[3]) * scale_show)), fill=None, outline='green', width=1)
         img.save(os.path.join(args.output_path, os.path.basename(file_name).split('.')[0] + '.png'))
 
-        save_dict.update({file_name.split('train/')[1]: cluster_boxes_dict})
+        save_dict.update({file_name.split('test/')[1]: cluster_boxes_dict})
 
     # save dict
     time_avg = time_total / len(candidates.keys())

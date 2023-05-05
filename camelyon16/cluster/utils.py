@@ -127,6 +127,8 @@ def save_cropped_result(img_array, max_window_size, min_window_size, dens_prob_t
     for img_file in tqdm(img_array, total=len(img_array)):
         slide = openslide.OpenSlide(img_file)
         overlay_map = np.load(os.path.join(dens_dir, os.path.basename(img_file).replace("tif", "npy")))
+        dens_shape = tuple([int(i / 2**densmap_level) for i in slide.level_dimensions[0]])
+        overlay_map = cv2.resize(overlay_map, (dens_shape[1], dens_shape[0]), interpolation=cv2.INTER_CUBIC)
         overlay_map = ((overlay_map / 255) > dens_prob_thres) * 255
 
         time_now = time.time()

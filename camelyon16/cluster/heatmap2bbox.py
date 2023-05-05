@@ -40,12 +40,20 @@ def parse_args():
     # args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/train', '50_50', '0.5'])
     # args.output_folder = '/media/ps/passport2/hhy/camelyon16/train/crop_split_l3'
 
-    args = parser.parse_args(['/media/hy/hhy_data/camelyon16/train/tumor', 
-                              '/media/hy/hhy_data/camelyon16/train/dens_map_ncrf_l8',
-                              '/media/hy/hhy_data/camelyon16/train/crop_split_ncrf_l0'])
+    args = parser.parse_args(['/media/hy/hhy_data/camelyon16/test/images', 
+                              '/media/hy/hhy_data/camelyon16/test/dens_map_ncrf_l8',
+                              '/media/hy/hhy_data/camelyon16/test/crop_split_ncrf_l1'])
     args.max_window_size = '4096_4096'
     args.min_window_size = '128_128'
     args.dens_prob_thres = 0.1
+
+    # args = parser.parse_args(['/media/hy/hhy_data/camelyon16/train/tumor', 
+    #                           '/media/hy/hhy_data/camelyon16/train/dens_map_sliding_l8',
+    #                           '/media/hy/hhy_data/camelyon16/train/crop_split_sliding_l1'])
+    # args.max_window_size = '4096_4096'
+    # args.min_window_size = '256_256'
+    # args.dens_prob_thres = 0.7
+
     return args
 
 
@@ -57,9 +65,17 @@ if __name__ == "__main__":
     args = parse_args()
     folder_name = args.output_path
     output_level = int(args.output_path.split('l')[-1])
-    densmap_level = int(args.densmap_path.split('l')[-1])
     img_array = glob.glob(f'{args.wsi_path}/*.tif')
-    anno_path = glob.glob(f'{args.densmap_path}/*.npy')
+
+    if 'sliding' in args.densmap_path:
+        densmap_path = os.path.join(args.densmap_path, 'model_l1')
+        densmap_level = 6
+    else:
+        densmap_path = args.densmap_path
+        densmap_level = int(args.densmap_path.split('l')[-1])
+
+    anno_path = glob.glob(f'{densmap_path}/*.npy')
+
     if not os.path.exists(folder_name):
         os.makedirs(folder_name, exist_ok=False)
     max_window_size = args.max_window_size.split("_")
@@ -67,4 +83,4 @@ if __name__ == "__main__":
     min_window_size = args.min_window_size.split("_")
     min_window_size = (int(min_window_size[0]), int(min_window_size[1]))
     save_cropped_result(img_array, max_window_size, min_window_size, args.dens_prob_thres, \
-                        args.densmap_path, args.output_path, densmap_level, output_level)
+                        densmap_path, args.output_path, densmap_level, output_level)
