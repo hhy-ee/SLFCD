@@ -2,5 +2,6 @@
 *.ckpt
 *.png
 *.ps
-*.json
 datasets
+report.txt
+save_train

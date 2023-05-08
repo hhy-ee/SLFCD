@@ -177,7 +177,7 @@ class ResNet(nn.Module):
         if self.crf:
             logits = self.crf(feats, logits)
 
-        logits = torch.squeeze(logits)
+        logits = torch.squeeze(logits, 2)
 
         return logits
 

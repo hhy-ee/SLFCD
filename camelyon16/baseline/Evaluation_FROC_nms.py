@@ -228,16 +228,16 @@ if __name__ == "__main__":
     # configuration
     wsi_folder = '/media/ps/passport2/hhy/camelyon16/test/images'
     mask_folder = '/media/ps/passport2/hhy/camelyon16/test/tumor_mask_l5'
-    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l5'
-    result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8/model_l1_l4'
+    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l8'
+    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8/model_l1_l4'
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_2s_l6'
-    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6/model_l1'
+    result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6/model_l1'
     threshold = 0.5
     
     # default setting
     EVALUATION_MASK_LEVEL = int(mask_folder.split('l')[-1])  # Image level at which the evaluation is done
     # PREDICT_MASK_LEVEL = int(result_folder.split('l')[-1])
-    PREDICT_MASK_LEVEL = 4
+    PREDICT_MASK_LEVEL = 6
     L0_RESOLUTION = 0.243  # pixel resolution at level 0
     
     result_file_list = []
@@ -259,7 +259,8 @@ if __name__ == "__main__":
         
         slide = openslide.open_slide(os.path.join(wsi_folder, case.split('.')[0] + '.tif'))
         result_mask = np.load(os.path.join(result_folder, case)) # 0~255 uint8
-        
+        if result_mask.dtype.name == 'float64':
+            result_mask = (result_mask * 255).astype(np.uint8)
         scale = [int(i / 2**PREDICT_MASK_LEVEL) for i in slide.level_dimensions[0]]
         result_mask = cv2.resize(result_mask.astype(np.uint8), (scale[1], scale[0]), interpolation=cv2.INTER_CUBIC)
         Probs, Xcorr, Ycorr = NMS(result_mask, threshold, PREDICT_MASK_LEVEL, EVALUATION_MASK_LEVEL, base_radius=3)

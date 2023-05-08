@@ -5,21 +5,21 @@ import PIL
 
 class WSIPatchDataset(Dataset):
 
-    def __init__(self, slide, tissue, sample_level, ckpt_level, image_size=256,
+    def __init__(self, slide, tissue, level_sample, level_ckpt, image_size=256,
                  normalize=True, flip='NONE', rotate='NONE'):
         self._slide = slide
         self._tissue = tissue
-        self._sample_level = sample_level
-        self._ckpt_level = ckpt_level
+        self._level_sample = level_sample
+        self._level_ckpt = level_ckpt
         self._patch_size = image_size
-        self._image_size = tuple([int(i / 2**ckpt_level) for i in slide.level_dimensions[0]])
+        self._image_size = tuple([int(i / 2**level_ckpt) for i in slide.level_dimensions[0]])
         self._normalize = normalize
         self._flip = flip
         self._rotate = rotate
         self._pre_process()
 
     def _pre_process(self): 
-        self._resolution = 2 ** (self._sample_level - self._ckpt_level)
+        self._resolution = 2 ** (self._level_sample - self._level_ckpt)
         self._X_idcs, self._Y_idcs = np.where(self._tissue)
         self._idcs_num = len(self._X_idcs)
 
@@ -32,11 +32,11 @@ class WSIPatchDataset(Dataset):
         x_center = int(x_mask * self._resolution)
         y_center = int(y_mask * self._resolution)
 
-        x = int((x_center - self._patch_size / 2) * self._slide.level_downsamples[self._ckpt_level])
-        y = int((y_center - self._patch_size / 2) * self._slide.level_downsamples[self._ckpt_level])
+        x = int((x_center - self._patch_size / 2) * self._slide.level_downsamples[self._level_ckpt])
+        y = int((y_center - self._patch_size / 2) * self._slide.level_downsamples[self._level_ckpt])
         
         img = self._slide.read_region(
-            (x, y), self._ckpt_level, (self._patch_size, self._patch_size)).convert('RGB')
+            (x, y), self._level_ckpt, (self._patch_size, self._patch_size)).convert('RGB')
         
         if self._flip == 'FLIP_LEFT_RIGHT':
             img = img.transpose(PIL.Image.FLIP_LEFT_RIGHT)

@@ -5,7 +5,7 @@ import logging
 import json
 import time
 import cv2
-from PIL import Image
+from skimage import transform
 
 import numpy as np
 import torch
@@ -57,7 +57,7 @@ def get_probs_map(model, dataloader):
 
     probs_map = np.zeros(dataloader.dataset._tissue.shape)
     num_batch = len(dataloader)
-    idx_center = 0
+    idx_center = dataloader.dataset._grid_size // 2
     
     count = 0
     time_now = time.time()
@@ -70,9 +70,9 @@ def get_probs_map(model, dataloader):
             # len of dim_0 (batch_size) of data is 1, then output removes this dim.
             # should be fixed in resnet.py by specifying torch.squeeze(dim=2) later
             if len(output.shape) == 1:
-                probs = output.sigmoid().cpu().data.numpy().flatten()
+                probs = output[idx_center].sigmoid().cpu().data.numpy().flatten()
             else:
-                probs = output.sigmoid().cpu().data.numpy().flatten()
+                probs = output[:, idx_center].sigmoid().cpu().data.numpy().flatten()
             
             probs_map[x_mask, y_mask] = probs
             count += 1
@@ -102,21 +102,25 @@ def make_dataloader(args, cnn, slide, tissue, flip='NONE', rotate='NONE'):
 
 
 def run(args):
+     # configuration
+    level_show = 6
+    level = int(args.probs_map_path.split('l')[-1])
+    
     os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
     logging.basicConfig(level=logging.INFO)
 
     with open(args.cnn_path) as f:
         cnn = json.load(f)
-    level = int(args.probs_map_path.split('l')[-1])
-    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level)))
+    
     time_total = 0.0
+    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level)))
     for file in dir:
         if os.path.exists(os.path.join(args.probs_map_path, file)):
             continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level), file.split('.')[0]+'.npy'))
         ckpt = torch.load(args.ckpt_path)
-        model = MODELS['resnet18'](num_nodes=1, use_crf=False)
+        model = MODELS['resnet18'](num_nodes=(cnn['patch_inf_size']//256)**2, use_crf='ncrf' in args.probs_map_path)
         model.load_state_dict(ckpt['state_dict'])
         model = model.cuda().eval()
 
@@ -162,16 +166,16 @@ def run(args):
 
             probs_map /= 8
 
-        tissue_mask = cv2.resize((tissue * 255).astype(np.uint8), (probs_map.shape[1], probs_map.shape[0]), interpolation=cv2.INTER_CUBIC)
-        probs_mask = (probs_map * 255).astype(np.uint8) * (tissue_mask > 128)
-        # probs_map = cv2.GaussianBlur((probs_map * 255).astype(np.uint8), (13,13), 11)
-        np.save(os.path.join(args.probs_map_path, file.split('.')[0] + '.npy'), probs_mask)
-
-        level_show = 6
-        img_rgb = slide.read_region((0, 0), level_show, tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
+        # save heatmap
+        probs_map = (probs_map * 255).astype(np.uint8)
+        np.save(os.path.join(args.probs_map_path, file.split('.')[0] + '.npy'), probs_map)
+        
+        # visulize heatmap
+        img_rgb = slide.read_region((0, 0), level_show, \
+                            tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
         img_rgb = np.asarray(img_rgb).transpose((1,0,2))
-        probs_img_rgb = cv2.resize(probs_mask, (img_rgb.shape[1], img_rgb.shape[0]), interpolation=cv2.INTER_CUBIC)
-        probs_img_rgb = cv2.applyColorMap(probs_img_rgb, cv2.COLORMAP_JET)
+        probs_map = cv2.resize(probs_map, (img_rgb.shape[1], img_rgb.shape[0]), interpolation=cv2.INTER_CUBIC)
+        probs_img_rgb = cv2.applyColorMap(probs_map, cv2.COLORMAP_JET)
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_map_path, file.split('.')[0] + '_heat.png'), heat_img)
@@ -180,24 +184,19 @@ def run(args):
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
 
 def main():
-    # args = parser.parse_args([
-    #     "/media/ps/passport2/hhy/camelyon16/train/tumor",
-    #     "/home/ps/hhy/slfcd/save_train/train_base_l2/best.ckpt",
-    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l2.json",
-    #     '/media/ps/passport2/hhy/camelyon16/train/dens_map_sliding_l2'])
-
-    # args = parser.parse_args([
-    #     "/media/ps/passport2/hhy/camelyon16/test/images",
-    #     "/home/ps/hhy/slfcd/save_train/train_ncrf/resnet18_base.ckpt",
-    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_ncrf.json",
-    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l5'])
-    
     args = parser.parse_args([
         "/media/ps/passport2/hhy/camelyon16/test/images",
-        "/home/ps/hhy/slfcd/save_train/train_ncrf/resnet18_base.ckpt",
-        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_ncrf.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_test_l8'])
-    args.GPU = "1"
+        "/home/ps/hhy/slfcd/save_train/train_base/resnet18_base.ckpt",
+        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base.json",
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_base_l8'])
+    args.GPU = "0"
+    
+    # args = parser.parse_args([
+    #     "/media/ps/passport2/hhy/camelyon16/test/images",
+    #     "/home/ps/hhy/slfcd/save_train/train_ncrf/resnet18_ncrf.ckpt",
+    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_ncrf.json",
+    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l6'])
+    # args.GPU = "1"
     
     # args = parser.parse_args([
     #     "/media/hy/hhy_data/camelyon16/train/tumor",
