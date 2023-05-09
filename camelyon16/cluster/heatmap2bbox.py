@@ -41,8 +41,8 @@ def parse_args():
     # args.output_folder = '/media/ps/passport2/hhy/camelyon16/train/crop_split_l3'
 
     args = parser.parse_args(['/media/hy/hhy_data/camelyon16/test/images', 
-                              '/media/hy/hhy_data/camelyon16/test/dens_map_ncrf_l8',
-                              '/media/hy/hhy_data/camelyon16/test/crop_split_ncrf_l1'])
+                              '/media/hy/hhy_data/camelyon16/test/dens_map_base_l8',
+                              '/media/hy/hhy_data/camelyon16/test/crop_split_base_l1'])
     args.max_window_size = '4096_4096'
     args.min_window_size = '128_128'
     args.dens_prob_thres = 0.1

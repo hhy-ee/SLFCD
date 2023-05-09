@@ -111,60 +111,24 @@ def run(args):
 
     with open(args.cnn_path) as f:
         cnn = json.load(f)
-    
+    ckpt = torch.load(args.ckpt_path)
+    model = MODELS['resnet18'](num_nodes=(cnn['patch_inf_size']//256)**2, use_crf='ncrf' in args.probs_map_path)
+    model.load_state_dict(ckpt['state_dict'])
+    model = model.cuda().eval()
+
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level)))
     for file in dir:
         if os.path.exists(os.path.join(args.probs_map_path, file)):
             continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
-        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level), file.split('.')[0]+'.npy'))
-        ckpt = torch.load(args.ckpt_path)
-        model = MODELS['resnet18'](num_nodes=(cnn['patch_inf_size']//256)**2, use_crf='ncrf' in args.probs_map_path)
-        model.load_state_dict(ckpt['state_dict'])
-        model = model.cuda().eval()
-
-        if not args.eight_avg:
-            dataloader = make_dataloader(
-                args, cnn, slide, tissue, flip='NONE', rotate='NONE')
-            probs_map, time_network = get_probs_map(model, dataloader)
-            time_total += time_network
-        else:
-            probs_map = np.zeros(slide.level_dimensions[level])
-
-            dataloader = make_dataloader(
-                args, cnn, flip='NONE', rotate='NONE')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='NONE', rotate='ROTATE_90')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='NONE', rotate='ROTATE_180')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='NONE', rotate='ROTATE_270')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='FLIP_LEFT_RIGHT', rotate='NONE')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='FLIP_LEFT_RIGHT', rotate='ROTATE_90')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='FLIP_LEFT_RIGHT', rotate='ROTATE_180')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='FLIP_LEFT_RIGHT', rotate='ROTATE_270')
-            probs_map += get_probs_map(model, dataloader)
-
-            probs_map /= 8
+        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level), file))
+        
+        # calculate heatmap & runtime
+        dataloader = make_dataloader(
+            args, cnn, slide, tissue, flip='NONE', rotate='NONE')
+        probs_map, time_network = get_probs_map(model, dataloader)
+        time_total += time_network
 
         # save heatmap
         probs_map = (probs_map * 255).astype(np.uint8)

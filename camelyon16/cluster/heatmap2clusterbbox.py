@@ -54,10 +54,10 @@ def parse_args():
     #                           '/media/hy/hhy_data/camelyon16/train/tumor_mask_l1/',
     #                           '/media/hy/hhy_data/camelyon16/train/crop_cluster_sliding_l1'])
     
-    args = parser.parse_args(['/media/hy/hhy_data/camelyon16/test/crop_split_ncrf_l1/results.json', 
-                              '/media/hy/hhy_data/camelyon16/test/dens_map_ncrf_l8',
+    args = parser.parse_args(['/media/hy/hhy_data/camelyon16/test/crop_split_base_l1/results.json', 
+                              '/media/hy/hhy_data/camelyon16/test/dens_map_base_l8',
                               '/media/hy/hhy_data/camelyon16/test/tumor_mask_l1/',
-                              '/media/hy/hhy_data/camelyon16/test/crop_cluster_ncrf_l1'])
+                              '/media/hy/hhy_data/camelyon16/test/crop_cluster_base_l1'])
     
     args.dens_thres = 0.5
     args.iou_thres = 0.3

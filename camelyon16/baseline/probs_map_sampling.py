@@ -91,12 +91,12 @@ def get_probs_map(model, slide, level, dataloader):
     return probs_map, time_total
 
 
-def make_dataloader(args, cnn, slide, tissue, level_sample, level_densmap, flip='NONE', rotate='NONE'):
+def make_dataloader(args, cnn, slide, tissue, level_sample, level_ckpt, flip='NONE', rotate='NONE'):
     batch_size = cnn['batch_inf_size']
     num_workers = args.num_workers
     
     dataloader = DataLoader(
-        WSIPatchDataset(slide, tissue, level_sample, level_densmap, 
+        WSIPatchDataset(slide, tissue, level_sample, level_ckpt, 
                         image_size=cnn['patch_inf_size'],
                         normalize=True, flip=flip, rotate=rotate),
         batch_size=batch_size, num_workers=num_workers, drop_last=False)
@@ -116,59 +116,25 @@ def run(args):
 
     with open(args.cnn_path) as f:
         cnn = json.load(f)
+    ckpt = torch.load(os.path.join(args.ckpt_path, 'best.ckpt'))
+    model = chose_model(cnn['model'])
+    model.load_state_dict(ckpt['state_dict'])
+    model = model.cuda().eval()
     
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
     for file in dir:
-        if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_save), file)):
+        if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
             continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
-        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample), file.split('.')[0]+'.npy'))
-        ckpt = torch.load(os.path.join(args.ckpt_path, 'best.ckpt'))
-        model = chose_model(cnn['model'])
-        model.load_state_dict(ckpt['state_dict'])
-        model = model.cuda().eval()
+        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample), file))
 
-        if not args.eight_avg:
-            dataloader = make_dataloader(
-                args, cnn, slide, tissue, level_sample, level_ckpt, flip='NONE', rotate='NONE')
-            probs_map, time_network = get_probs_map(model, slide, level_ckpt, dataloader)
-            time_total += time_network
-        else:
-            dataloader = make_dataloader(
-                args, cnn, flip='NONE', rotate='NONE')
-            probs_map += get_probs_map(model, dataloader)
+        # calculate heatmap & runtime
+        dataloader = make_dataloader(
+            args, cnn, slide, tissue, level_sample, level_ckpt, flip='NONE', rotate='NONE')
+        probs_map, time_network = get_probs_map(model, slide, level_ckpt, dataloader)
+        time_total += time_network
 
-            dataloader = make_dataloader(
-                args, cnn, flip='NONE', rotate='ROTATE_90')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='NONE', rotate='ROTATE_180')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='NONE', rotate='ROTATE_270')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='FLIP_LEFT_RIGHT', rotate='NONE')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='FLIP_LEFT_RIGHT', rotate='ROTATE_90')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='FLIP_LEFT_RIGHT', rotate='ROTATE_180')
-            probs_map += get_probs_map(model, dataloader)
-
-            dataloader = make_dataloader(
-                args, cnn, flip='FLIP_LEFT_RIGHT', rotate='ROTATE_270')
-            probs_map += get_probs_map(model, dataloader)
-
-            probs_map /= 8
-        
         # save heatmap
         probs_map = (probs_map * 255).astype(np.uint8)
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
