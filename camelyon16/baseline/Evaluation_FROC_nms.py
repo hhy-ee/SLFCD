@@ -219,19 +219,24 @@ def plotFROC(total_FPs, total_sensitivity):
     plt.ylabel('Metastasis detection sensitivity', fontsize=12)
     fig.suptitle('Free response receiver operating characteristic curve', fontsize=12)
     plt.plot(total_FPs, total_sensitivity, '-', color='#000000')
-    plt.savefig('/media/ps/passport2/hhy/camelyon16/train/0.png')
+    # plt.savefig('/media/ps/passport2/hhy/camelyon16/train/0.png')
     plt.show()
 
 
 if __name__ == "__main__":
     
     # configuration
-    wsi_folder = '/media/ps/passport2/hhy/camelyon16/test/images'
-    mask_folder = '/media/ps/passport2/hhy/camelyon16/test/tumor_mask_l5'
+    # wsi_folder = '/media/ps/passport2/hhy/camelyon16/test/images'
+    # mask_folder = '/media/ps/passport2/hhy/camelyon16/test/tumor_mask_l5'
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l8'
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8/model_l1_l4'
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_2s_l6'
-    result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6/model_l1'
+    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6/model_l1'
+
+    wsi_folder = '/media/hy/hhy_data/camelyon16/test/images/'
+    mask_folder = '/media/hy/hhy_data/camelyon16/test/tumor_mask_l5'
+    result_folder = '/media/hy/hhy_data/camelyon16/test/dens_map_assign_l6/model_l1/save_l3/'
+
     threshold = 0.5
     
     # default setting
