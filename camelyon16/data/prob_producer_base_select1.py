@@ -19,25 +19,34 @@ class WSIPatchDataset(Dataset):
 
     def _pre_process(self):
         self.image_batch = []
+        box_len = sum([len(item['render_seq']) for item in self._assign])
         self.boxes = []
         self.patches = []
         count = 0
-        for assign in self._assign:   
-            o_x1 = assign[1][0]
-            o_x2 = assign[2][0]
-            o_y1 = assign[1][1]
-            o_y2 = assign[2][1]
-            box = [o_x1, o_y1, o_x2, o_y2]
-            
-            w = o_x2 - o_x1
-            h = o_y2 - o_y1
-            o_s_x1 = int(o_x1 * self._slide.level_downsamples[self._level_ckpt])
-            o_s_y1 = int(o_y1 * self._slide.level_downsamples[self._level_ckpt])
-            patch = self._slide .read_region((o_s_x1, o_s_y1), self._level_ckpt, (w, h)).convert('RGB')
-            patch = np.asarray(patch).transpose((1,0,2))
-            self.boxes.append(box)
-            self.patches.append(patch)
-            count += 1
+        for assign in self._assign:
+            for idx in assign['render_seq']:
+                box = assign['origin_cluster_box'][idx]
+                box[2] = max(box[2], box[0] + 1)
+                box[3] = max(box[3], box[1] + 1)
+                moved_box = assign['moved_cluster_box'][idx]
+                o_x1, o_y1, o_x2, o_y2 = box
+                w = o_x2 - o_x1
+                h = o_y2 - o_y1
+                o_s_x1 = int(o_x1 * self._slide.level_downsamples[self._level_ckpt])
+                o_s_y1 = int(o_y1 * self._slide.level_downsamples[self._level_ckpt])
+                patch = self._slide .read_region((o_s_x1, o_s_y1), self._level_ckpt, (w, h)).convert('RGB')
+                patch = np.asarray(patch).transpose((1,0,2))
+                x1, y1, x2, y2 = moved_box
+
+                w = x2 - x1
+                h = y2 - y1
+                int_w = max(1, int(w))
+                int_h = max(1, int(h))
+
+                patch = cv2.resize(patch, (int_h, int_w), interpolation=cv2.INTER_CUBIC)
+                self.boxes.append(box)
+                self.patches.append(patch)
+                count += 1
         self._idcs_num = len(self.patches)
 
     def __len__(self):

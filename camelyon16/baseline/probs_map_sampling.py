@@ -86,7 +86,7 @@ def get_probs_map(model, slide, level, dataloader):
         zero_mask = counter == 0
         probs_map[~zero_mask] = probs_map[~zero_mask] / counter[~zero_mask]
         del counter
-  
+
         logging.info('Total Network Run Time : {:.4f}'.format(time_total))
     return probs_map, time_total
 
@@ -110,7 +110,7 @@ def run(args):
     level_show = 6
     level_sample = int(args.probs_map_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
-    
+
     os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
     logging.basicConfig(level=logging.INFO)
 
@@ -175,7 +175,7 @@ def main():
     #     "/media/hy/hhy_data/camelyon16/train/tumor",
     #     "/media/ruiq/Data/hhy/SLFCD/save_train/train_base_l1",
     #     "/media/ruiq/Data/hhy/SLFCD/camelyon16/configs/cnn_base_l1.json",
-    #     '/media/hy/hhy_data/camelyon16/train/dens_map_sampling_l8']) 
+    #     '/media/hy/hhy_data/camelyon16/train/dens_map_sampling_l8'])
     # args.GPU = "1"
     
     run(args)

@@ -75,9 +75,9 @@ def get_probs_map(model, slide, level, dataloader):
             # should be fixed in resnet.py by specifying torch.squeeze(dim=2) later
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
             for i in range(probs.shape[0]):
-                counter[box[i][0]:box[i][2], box[i][1]:box[i][3]] += 1
-                patch_prob = transform.resize(probs[i, 0, :], (box[i][2]-box[i][0], box[i][3]-box[i][1]))
-                probs_map[box[i][0]:box[i][2], box[i][1]:box[i][3]] += patch_prob
+                counter[box[0][i]:box[2][i], box[1][i]:box[3][i]] += 1
+                patch_prob = transform.resize(probs[i, 0, :], (box[2][i]-box[0][i], box[3][i]-box[1][i]))
+                probs_map[box[0][i]:box[2][i], box[1][i]:box[3][i]] += patch_prob
             count += 1
             time_spent = time.time() - time_now
             time_now = time.time()
@@ -132,15 +132,12 @@ def run(args):
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
     for file in sorted(dir):
-        if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
-            continue
+        # if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), 'save_l{}'.format(level_save), file)):
+        #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample), file))
-
-        assign_per_img = []
-        for item in assign:
-            if item['file_name'] == os.path.join(args.wsi_path.split('/')[-1], file.split('.')[0]+'.tif'):
-                assign_per_img.append(item)
+                
+        assign_per_img = assign[os.path.join('/media/hy/hhy_data/camelyon16/test/images/', file.split('.')[0]+'.tif')]
 
         if len(assign_per_img) == 0:
             probs_map = np.zeros(tuple([int(i / 2**level_ckpt) for i in slide.level_dimensions[0]]))
@@ -155,7 +152,7 @@ def run(args):
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
         np.save(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), \
-                                 'save_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+                                 'save_test1_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -166,7 +163,7 @@ def run(args):
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), \
-                                   'save_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+                                   'save_test1_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -177,8 +174,8 @@ def main():
         "/home/ps/hhy/slfcd/save_train/train_base_l1",
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
         '/media/ps/passport2/hhy/camelyon16/test/dens_map_select_l6',
-        "/media/ps/passport2/hhy/camelyon16/test/testset_assign_and_move.json"])
-    args.GPU = "1"
+        "/media/ps/passport2/hhy/camelyon16/test/results.json"])
+    args.GPU = "0"
 
     # args = parser.parse_args([
     #     "/media/hy/hhy_data/camelyon16/test/images",

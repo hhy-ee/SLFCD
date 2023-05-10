@@ -226,23 +226,25 @@ def plotFROC(total_FPs, total_sensitivity):
 if __name__ == "__main__":
     
     # configuration
-    # wsi_folder = '/media/ps/passport2/hhy/camelyon16/test/images'
-    # mask_folder = '/media/ps/passport2/hhy/camelyon16/test/tumor_mask_l5'
+    wsi_folder = '/media/ps/passport2/hhy/camelyon16/test/images'
+    mask_folder = '/media/ps/passport2/hhy/camelyon16/test/tumor_mask_l5'
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l8'
-    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8/model_l1_l4'
+    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8/model_l1/save_l3'
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_2s_l6'
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6/model_l1'
-
-    wsi_folder = '/media/hy/hhy_data/camelyon16/test/images/'
-    mask_folder = '/media/hy/hhy_data/camelyon16/test/tumor_mask_l5'
-    result_folder = '/media/hy/hhy_data/camelyon16/test/dens_map_assign_l6/model_l1/save_l3/'
+    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_select_l6/model_l1/save_l3/'
+    result_folder = '/media/ps/passport1/hhy_data/camelyon16/test/dens_map_sampling_l8/model_l1/'
+    
+    # wsi_folder = '/media/hy/hhy_data/camelyon16/test/images/'
+    # mask_folder = '/media/hy/hhy_data/camelyon16/test/tumor_mask_l5'
+    # result_folder = '/media/hy/hhy_data/camelyon16/test/dens_map_assign_l6/model_l1/save_l3/'
 
     threshold = 0.5
     
     # default setting
     EVALUATION_MASK_LEVEL = int(mask_folder.split('l')[-1])  # Image level at which the evaluation is done
     # PREDICT_MASK_LEVEL = int(result_folder.split('l')[-1])
-    PREDICT_MASK_LEVEL = 6
+    PREDICT_MASK_LEVEL = 3
     L0_RESOLUTION = 0.243  # pixel resolution at level 0
     
     result_file_list = []
