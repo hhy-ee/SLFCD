@@ -118,7 +118,7 @@ def run(args):
 
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level)))
-    for file in dir:
+    for file in sorted(dir):
         if os.path.exists(os.path.join(args.probs_map_path, file)):
             continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
@@ -131,8 +131,8 @@ def run(args):
         time_total += time_network
 
         # save heatmap
-        probs_map = (probs_map * 255).astype(np.uint8)
         np.save(os.path.join(args.probs_map_path, file.split('.')[0] + '.npy'), probs_map)
+        probs_map = (probs_map * 255).astype(np.uint8)
         
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -152,8 +152,8 @@ def main():
         "/media/ps/passport2/hhy/camelyon16/test/images",
         "/home/ps/hhy/slfcd/save_train/train_base/resnet18_base.ckpt",
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_base_l8'])
-    args.GPU = "0"
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_base_float_l8'])
+    args.GPU = "2"
     
     # args = parser.parse_args([
     #     "/media/ps/passport2/hhy/camelyon16/test/images",

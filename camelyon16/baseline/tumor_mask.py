@@ -26,7 +26,7 @@ parser.add_argument('--vis_result', default=False, type=bool, help='whether'
 
 def run(args):
     dir = os.listdir(args.json_path)
-    for file in tqdm(dir, total=len(dir)):
+    for file in tqdm(sorted(dir), total=len(dir)):
         # get the level * dimensions e.g. tumor0.tif level 6 shape (1589, 7514)
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0] + '.tif'))
         level = int(args.npy_path.split('l')[-1])

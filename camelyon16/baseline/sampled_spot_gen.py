@@ -70,7 +70,7 @@ class patch_point_in_mask_gen(object):
 
 def run(args):
     dir = os.listdir(args.tissue_path)
-    for file in tqdm(dir, total=len(dir)):
+    for file in tqdm(sorted(dir), total=len(dir)):
         tumor_path = os.path.join(args.tumor_path, file.split('.')[0] + '.npy')
         tissue_path = os.path.join(args.tissue_path, file.split('.')[0] + '.npy')
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('_')[0], file.split('.')[0]+'.tif'))

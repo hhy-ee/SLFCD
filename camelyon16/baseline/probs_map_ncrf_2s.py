@@ -110,7 +110,7 @@ def run(args):
     level = int(args.probs_map_path.split('l')[-1])
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level)))
     time_total = 0.0
-    for file in dir:
+    for file in sorted(dir):
         if os.path.exists(os.path.join(args.probs_map_path, file)):
             continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))

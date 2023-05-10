@@ -21,7 +21,7 @@ parser.add_argument("normal_path", default=None, metavar='NORMAL_PATCH', type=st
 
 def run(args):
     dir = os.listdir(args.tumor_path)
-    for file in tqdm(dir, total=len(dir)):
+    for file in tqdm(sorted(dir), total=len(dir)):
         if file.split('.')[-1] == 'npy':
             tumor_mask = np.load(os.path.join(args.tumor_path, file))
             tissue_mask = np.load(os.path.join(args.tissue_path, file))

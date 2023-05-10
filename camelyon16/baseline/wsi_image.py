@@ -21,7 +21,7 @@ parser.add_argument('png_path', default=None, metavar='NPY_PATH', type=str,
 
 def run(args):
     dir = os.listdir(args.wsi_path)
-    for file in dir:
+    for file in sorted(dir):
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file))
         level = int(args.png_path.split('l')[-1])
         wsi_img = slide.read_region((0, 0), level,

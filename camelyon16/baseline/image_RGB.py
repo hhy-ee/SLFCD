@@ -26,7 +26,7 @@ parser.add_argument('--RGB_min', default=50, type=int, help='min value for RGB'
 def run(args):
     logging.basicConfig(level=logging.INFO)
     dir = os.listdir(args.wsi_path)
-    for file in tqdm(dir, total=len(dir)):
+    for file in tqdm(sorted(dir), total=len(dir)):
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file))
 
         # note the shape of img_RGB is the transpose of slide.level_dimensions

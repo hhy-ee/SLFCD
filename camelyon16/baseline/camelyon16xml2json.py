@@ -17,7 +17,7 @@ parser.add_argument('json_path', default=None, metavar='JSON_PATH', type=str,
 
 def run(args):
     dir = os.listdir(args.xml_path)
-    for file in dir:
+    for file in sorted(dir):
         if file.split('.')[-1] == 'xml':
             xml_path = os.path.join(args.xml_path, file)
             json_path = os.path.join(args.json_path, file.split('.')[0] + '.json')
