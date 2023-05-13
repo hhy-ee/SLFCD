@@ -21,23 +21,19 @@ class WSIPatchDataset(Dataset):
         self.image_batch = []
         self.boxes = []
         self.patches = []
-        count = 0
         for assign in self._assign:   
-            o_x1 = assign[1][0]
-            o_x2 = assign[2][0]
-            o_y1 = assign[1][1]
-            o_y2 = assign[2][1]
-            box = [o_x1, o_y1, o_x2, o_y2]
-            
-            w = o_x2 - o_x1
-            h = o_y2 - o_y1
+            o_x1, o_x2, o_y1, o_y2 = assign[1][0], assign[2][0], assign[1][1], assign[2][1]
             o_s_x1 = int(o_x1 * self._slide.level_downsamples[self._level_ckpt])
             o_s_y1 = int(o_y1 * self._slide.level_downsamples[self._level_ckpt])
-            patch = self._slide .read_region((o_s_x1, o_s_y1), self._level_ckpt, (w, h)).convert('RGB')
-            patch = np.asarray(patch).transpose((1,0,2))
+            w = o_x2 - o_x1
+            h = o_y2 - o_y1
+            
+            box = [o_x1, o_y1, o_x2, o_y2]
+            patch = [o_s_x1, o_s_y1, w, h]
+            
             self.boxes.append(box)
             self.patches.append(patch)
-            count += 1
+            
         self._idcs_num = len(self.patches)
 
     def __len__(self):
@@ -45,7 +41,10 @@ class WSIPatchDataset(Dataset):
 
     def __getitem__(self, idx):
         box = self.boxes[idx]
-        img = self.patches[idx]
+        patch = self.patches[idx]
+        o_s_x1, o_s_y1, w, h = patch
+        
+        img = self._slide.read_region((o_s_x1, o_s_y1), self._level_ckpt, (w, h)).convert('RGB')
 
         if self._flip == 'FLIP_LEFT_RIGHT':
             img = img.transpose(PIL.Image.FLIP_LEFT_RIGHT)
@@ -61,9 +60,14 @@ class WSIPatchDataset(Dataset):
 
             # PIL image:   H x W x C
             # torch image: C X H X W
+        img = np.asarray(img).transpose((1, 0, 2))
+        resize = False
+        if w > 2048 or h >2048:
+            img = cv2.resize(img, (2048, 2048), interpolation=cv2.INTER_CUBIC)
+            resize = True
         img = img.astype("float32").transpose(2, 0, 1)
 
         if self._normalize:
             img = (img - 128.0) / 128.0
 
-        return (img, box)
+        return (img, box, resize)

@@ -22,7 +22,7 @@ from camelyon16.cluster.utils import generate_crop
 torch.manual_seed(0)
 torch.cuda.manual_seed_all(0)
 
-from camelyon16.data.prob_producer_base_select1 import WSIPatchDataset  # noqa
+from camelyon16.data.prob_producer_base_nassign_select import WSIPatchDataset  # noqa
 
 
 parser = argparse.ArgumentParser(description='Get the probability map of tumor'
@@ -76,6 +76,7 @@ def get_probs_map(model, slide, level, dataloader):
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
             for i in range(probs.shape[0]):
                 counter[box[0][i]:box[2][i], box[1][i]:box[3][i]] += 1
+                patch_prob = probs[i, 0, :]
                 patch_prob = transform.resize(probs[i, 0, :], (box[2][i]-box[0][i], box[3][i]-box[1][i]))
                 probs_map[box[0][i]:box[2][i], box[1][i]:box[3][i]] += patch_prob
             count += 1
@@ -132,7 +133,7 @@ def run(args):
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
     for file in sorted(dir):
-        # if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), 'save_l{}'.format(level_save), file)):
+        # if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), 'save_test_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample), file))
@@ -155,7 +156,7 @@ def run(args):
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
         np.save(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), \
-                                 'save_test_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+                                 'save_test2_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -166,7 +167,7 @@ def run(args):
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), \
-                                   'save_test_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+                                   'save_test2_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -178,7 +179,7 @@ def main():
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
         '/media/ps/passport2/hhy/camelyon16/test/dens_map_select_l6',
         "/media/ps/passport2/hhy/camelyon16/test/testset_assign_and_move.json"])
-    args.GPU = "3"
+    args.GPU = "1"
 
     # args = parser.parse_args([
     #     "/media/hy/hhy_data/camelyon16/test/images",
