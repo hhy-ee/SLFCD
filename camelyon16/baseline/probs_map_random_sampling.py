@@ -128,16 +128,16 @@ def run(args):
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
     for file in sorted(dir):
-        if os.path.exists(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                            'save_random_l{}'.format(level_save), file)):
-            continue
+        # if os.path.exists(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
+        #                     'save_random_l{}'.format(level_save), file)):
+        #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         
         tissue = np.load(os.path.join(os.path.dirname(args.probs_map_path), 'dens_map_{}'.format(args.roi_generator), file))
         tissue_shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
         tissue = cv2.resize(tissue, (tissue_shape[1], tissue_shape[0]), interpolation=cv2.INTER_CUBIC)
         POI = ((tissue / 255) > args.roi_threshold) * tissue
-
+        
         # calculate heatmap & runtime
         dataloader = make_dataloader(
             args, cnn, slide, POI, level_sample, level_ckpt, flip='NONE', rotate='NONE')
@@ -170,8 +170,8 @@ def main():
         "/media/ps/passport2/hhy/camelyon16/test/images",
         "/home/ps/hhy/slfcd/save_train/train_base_l1",
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6'])
-    args.GPU = "0"
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l8'])
+    args.GPU = "1"
 
     # args = parser.parse_args([
     #     "/media/hy/hhy_data/camelyon16/train/tumor",

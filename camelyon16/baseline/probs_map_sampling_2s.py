@@ -128,9 +128,9 @@ def run(args):
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
     for file in sorted(dir):
-        if os.path.exists(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                            'save_l{}'.format(level_save), file)):
-            continue
+        # if os.path.exists(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
+        #                     'save_l{}'.format(level_save), file)):
+        #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         
         tissue = np.load(os.path.join(os.path.dirname(args.probs_map_path), 'dens_map_{}'.format(args.roi_generator), file))
@@ -170,7 +170,7 @@ def main():
         "/media/ps/passport2/hhy/camelyon16/test/images",
         "/home/ps/hhy/slfcd/save_train/train_base_l1",
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6'])
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l8'])
     args.GPU = "0"
 
     # args = parser.parse_args([
