@@ -41,9 +41,9 @@ def parse_args():
     # args.output_folder = '/media/ps/passport2/hhy/camelyon16/train/crop_split_l3'
 
     args = parser.parse_args(['/media/hy/hhy_data/camelyon16/test/images', 
-                              '/media/hy/hhy_data/camelyon16/test/dens_map_base_l8',
-                              '/media/hy/hhy_data/camelyon16/test/crop_split_base_l1'])
-    args.max_window_size = '4096_4096'
+                              '/media/hy/hhy_data/camelyon16/test/dens_map_sampling_l8',
+                              '/media/hy/hhy_data/camelyon16/test/crop_split_2048_sampling_l1'])
+    args.max_window_size = '2048_2048'
     args.min_window_size = '128_128'
     args.dens_prob_thres = 0.1
 
@@ -67,12 +67,8 @@ if __name__ == "__main__":
     output_level = int(args.output_path.split('l')[-1])
     img_array = glob.glob(f'{args.wsi_path}/*.tif')
 
-    if 'sliding' in args.densmap_path:
-        densmap_path = os.path.join(args.densmap_path, 'model_l1')
-        densmap_level = 6
-    else:
-        densmap_path = args.densmap_path
-        densmap_level = int(args.densmap_path.split('l')[-1])
+    densmap_level = 6
+    densmap_path = os.path.join(args.densmap_path, 'model_l1', 'save_l3')
 
     anno_path = glob.glob(f'{densmap_path}/*.npy')
 

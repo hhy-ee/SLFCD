@@ -22,7 +22,7 @@ class WSIPatchDataset(Dataset):
         for assign in self._assign:
             boxes = np.zeros((max_box_len, 4), dtype=np.int)
             moved_boxes = np.zeros((max_box_len, 4), dtype=np.int)
-            canvas = np.zeros((assign['bin_height'], assign['bin_width'], 3))
+            canvas = np.zeros((max_box_len, 8), dtype=np.int)
             for idx in assign['render_seq']:
                 box = assign['origin_cluster_box'][idx]
                 box[2] = max(box[2], box[0] + 1)
@@ -33,20 +33,15 @@ class WSIPatchDataset(Dataset):
                 h = o_y2 - o_y1
                 o_s_x1 = int(o_x1 * self._slide.level_downsamples[self._level_ckpt])
                 o_s_y1 = int(o_y1 * self._slide.level_downsamples[self._level_ckpt])
-                patch = self._slide .read_region((o_s_x1, o_s_y1), self._level_ckpt, (w, h)).convert('RGB')
-                patch = np.asarray(patch).transpose((1,0,2))
                 x1, y1, x2, y2 = moved_box
-
-                w = x2 - x1
-                h = y2 - y1
-                int_w = max(1, int(w))
-                int_h = max(1, int(h))
-
-                patch = cv2.resize(patch, (int_h, int_w), interpolation=cv2.INTER_CUBIC)
-                canvas[int(x1): int(x1) + int_w, int(y1): int(y1) + int_h] = patch
+                m_w = x2 - x1
+                m_h = y2 - y1
+                int_w = max(1, int(m_w))
+                int_h = max(1, int(m_h))
 
                 boxes[idx, :] = box
                 moved_boxes[idx, :] = [int(x1), int(y1), int(x1) + int_w, int(y1) + int_h]
+                canvas[idx, :] = [o_s_x1, o_s_y1, w, h, int_w, int_h, assign['bin_width'], assign['bin_height']]
 
             self._canvas.append([canvas, boxes, moved_boxes])
         self._idcs_num = len(self._canvas)
@@ -55,7 +50,16 @@ class WSIPatchDataset(Dataset):
         return self._idcs_num
 
     def __getitem__(self, idx):
-        img, boxes, moved_boxes = self._canvas[idx]
+        canvas, boxes, moved_boxes = self._canvas[idx]
+        canvas = canvas[:np.where(canvas[:,-1] != 0)[0][-1] + 1]
+        img = np.zeros((canvas[0, 6], canvas[0, 7], 3))
+        for i in range(len(canvas)):
+            o_s_x1, o_s_y1, w, h, int_w, int_h = canvas[i, :6] 
+            patch = self._slide.read_region((o_s_x1, o_s_y1), self._level_ckpt, (w, h)).convert('RGB')
+            patch = np.asarray(patch).transpose((1, 0, 2))
+            patch = cv2.resize(patch, (int_h, int_w), interpolation=cv2.INTER_CUBIC)
+            img[moved_boxes[i, 0]: moved_boxes[i, 2], moved_boxes[i, 1]: moved_boxes[i, 3]] = patch
+            # cv2.imwrite('/media/hy/hhy_data/camelyon16/test/dens_map_assign_l6/model_l1/{}.png'.format(idx), img.astype(np.uint8))
 
         if self._flip == 'FLIP_LEFT_RIGHT':
             img = img.transpose(PIL.Image.FLIP_LEFT_RIGHT)

@@ -89,14 +89,14 @@ def split_overlay_map(grid, max_window_size, densmap_level, output_level):
                 if right - left + 1 <= max_window_size[0] / 2**(densmap_level - output_level):
                     left = min(j_cp, left)
                     right = max(j_cp, right)
-                    if 0 <= i_cp < m and 0 <= j_cp < n and not visit[i_cp][j_cp]:
+                    if 0 <= i_cp < m and 0 <= j_cp < n-1 and not visit[i_cp][j_cp]:
                         if grid[i_cp][j_cp] != 0:
                             queue.append([i_cp, j_cp - 1])
                             queue.append([i_cp, j_cp + 1])
                 if bot - top + 1 <= max_window_size[1] / 2**(densmap_level - output_level):
                     top = min(i_cp, top)
                     bot = max(i_cp, bot)
-                    if 0 <= i_cp < m and 0 <= j_cp < n and not visit[i_cp][j_cp]:
+                    if 0 <= i_cp < m-1 and 0 <= j_cp < n and not visit[i_cp][j_cp]:
                         if grid[i_cp][j_cp] != 0:
                             queue.append([i_cp + 1, j_cp])
                             queue.append([i_cp - 1, j_cp])

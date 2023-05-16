@@ -40,19 +40,19 @@ def parse_args():
     # args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/train', '50_50', '0.5'])
     # args.output_folder = '/media/ps/passport2/hhy/camelyon16/train/crop_split_l3'
 
-    args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/test/images', 
-                              '/media/ps/passport2/hhy/camelyon16/test/dens_map_base_l8',
-                              '/media/ps/passport2/hhy/camelyon16/test/crop_split_base_l1'])
+    # args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/test/images', 
+    #                           '/media/ps/passport2/hhy/camelyon16/test/dens_map_base_l8',
+    #                           '/media/ps/passport2/hhy/camelyon16/test/crop_split_2048_base_l1'])
+    # args.max_window_size = '2048_2048'
+    # args.min_window_size = '128_128'
+    # args.dens_prob_thres = 0.1
+
+    args = parser.parse_args(['/media/hy/hhy_data/camelyon16/test/images', 
+                              '/media/hy/hhy_data/camelyon16/test/dens_map_base_l8',
+                              '/media/hy/hhy_data/camelyon16/test/crop_split_2048_base_l1'])
     args.max_window_size = '2048_2048'
     args.min_window_size = '128_128'
     args.dens_prob_thres = 0.1
-
-    # args = parser.parse_args(['/media/hy/hhy_data/camelyon16/train/tumor', 
-    #                           '/media/hy/hhy_data/camelyon16/train/dens_map_sliding_l8',
-    #                           '/media/hy/hhy_data/camelyon16/train/crop_split_sliding_l1'])
-    # args.max_window_size = '4096_4096'
-    # args.min_window_size = '256_256'
-    # args.dens_prob_thres = 0.7
 
     return args
 
