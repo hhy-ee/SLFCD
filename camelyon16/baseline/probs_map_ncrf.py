@@ -118,9 +118,9 @@ def run(args):
 
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level)))
-    for file in sorted(dir):
-        if os.path.exists(os.path.join(args.probs_map_path, file)):
-            continue
+    for file in [file for file in sorted(dir) if not os.path.exists(os.path.join(args.probs_map_path, file))][20:]:
+        # if os.path.exists(os.path.join(args.probs_map_path, file)):
+        #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level), file))
         
@@ -147,20 +147,13 @@ def run(args):
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
 
-def main():
+def main():  
     args = parser.parse_args([
         "/media/ps/passport2/hhy/camelyon16/test/images",
-        "/home/ps/hhy/slfcd/save_train/train_base/resnet18_base.ckpt",
-        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_base_float_l8'])
+        "/home/ps/hhy/slfcd/save_train/train_ncrf/resnet18_ncrf.ckpt",
+        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_ncrf.json",
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l6'])
     args.GPU = "2"
-    
-    # args = parser.parse_args([
-    #     "/media/ps/passport2/hhy/camelyon16/test/images",
-    #     "/home/ps/hhy/slfcd/save_train/train_ncrf/resnet18_ncrf.ckpt",
-    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_ncrf.json",
-    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l6'])
-    # args.GPU = "1"
     
     # args = parser.parse_args([
     #     "/media/hy/hhy_data/camelyon16/train/tumor",

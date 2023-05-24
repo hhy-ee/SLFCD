@@ -32,9 +32,11 @@ parser.add_argument('ckpt_path', default=None, metavar='CKPT_PATH', type=str,
 parser.add_argument('cnn_path', default=None, metavar='CNN_PATH', type=str,
                     help='Path to the config file in json format related to'
                     ' the ckpt file')
+parser.add_argument('POI_path', default=None, metavar='PROBS_MAP_PATH',
+                    type=str, help='Path to the point of interest numpy file')
 parser.add_argument('probs_map_path', default=None, metavar='PROBS_MAP_PATH',
                     type=str, help='Path to the output probs_map numpy file')
-parser.add_argument('--roi_generator', default='base_l8', metavar='ROI_GENERATOR',
+parser.add_argument('--roi_generator', default='sampling_l8', metavar='ROI_GENERATOR',
                     type=str, help='type of the generator of the first stage')
 parser.add_argument('--roi_threshold', default=0.1, metavar='ROI_GENERATOR',
                     type=float, help='type of the generator of the first stage')
@@ -117,7 +119,7 @@ def run(args):
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
     logging.basicConfig(level=logging.INFO)
-
+        
     with open(args.cnn_path) as f:
         cnn = json.load(f)
     ckpt = torch.load(os.path.join(args.ckpt_path, 'best.ckpt'))
@@ -127,16 +129,13 @@ def run(args):
     
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
-    for file in sorted(dir):
+    for file in sorted(dir)[94:128]:
         # if os.path.exists(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
         #                     'save_random_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         
-        tissue = np.load(os.path.join(os.path.dirname(args.probs_map_path), 'dens_map_{}'.format(args.roi_generator), file))
-        tissue_shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
-        tissue = cv2.resize(tissue, (tissue_shape[1], tissue_shape[0]), interpolation=cv2.INTER_CUBIC)
-        POI = ((tissue / 255) > args.roi_threshold) * tissue
+        POI = np.load(os.path.join(os.path.dirname(args.POI_path), file))
         
         # calculate heatmap & runtime
         dataloader = make_dataloader(
@@ -149,7 +148,7 @@ def run(args):
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
         np.save(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                 'save_random_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+                                 'save_min_200_fix_size_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -160,7 +159,7 @@ def run(args):
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                   'save_random_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+                                   'save_min_200_fix_size_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -170,7 +169,9 @@ def main():
         "/media/ps/passport2/hhy/camelyon16/test/images",
         "/home/ps/hhy/slfcd/save_train/train_base_l1",
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l8'])
+        '/media/ps/passport2/hhy/camelyon16/test/heatmap2box_result/crop_split_min_200_l1/',
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6'])
+    args.roi_generator = 'distance'
     args.GPU = "1"
 
     # args = parser.parse_args([

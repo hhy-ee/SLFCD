@@ -5,10 +5,11 @@ import PIL
 
 class WSIPatchDataset(Dataset):
 
-    def __init__(self, slide, tissue, level_sample, level_ckpt, image_size=256,
+    def __init__(self, slide, POI, level_sample, level_ckpt, image_size=256,
                  normalize=True, flip='NONE', rotate='NONE'):
         self._slide = slide
-        self._tissue = tissue
+        self._POI = POI
+        self._tissue = POI > 0
         self._level_sample = level_sample
         self._level_ckpt = level_ckpt
         self._patch_size = image_size
@@ -32,8 +33,9 @@ class WSIPatchDataset(Dataset):
         x_center = int(x_mask * self._resolution)
         y_center = int(y_mask * self._resolution)
 
-        patch_prob = self._tissue[x_mask, y_mask] / 255
-        patch_size = int(1024 / 2** (np.abs(patch_prob - 0.5) * 8)) // 2 * 2
+        # patch_prob = self._saliency[x_center-128:x_center+128, y_center-128:y_center+128].mean() / 255
+        # patch_size = int(256 / 2** (np.abs(patch_prob - 0.5) * 5)) // 2 * 2
+        patch_size = self._patch_size
         
         x = int((x_center - patch_size / 2) * self._slide.level_downsamples[self._level_ckpt])
         y = int((y_center - patch_size / 2) * self._slide.level_downsamples[self._level_ckpt])
@@ -62,7 +64,7 @@ class WSIPatchDataset(Dataset):
         
         left = max(x_center - patch_size // 2, 0)
         right = min(x_center + patch_size // 2, self._image_size[0])
-        top = max(y_center - patch_size// 2, 0)
+        top = max(y_center - patch_size // 2, 0)
         bot = min(y_center + patch_size // 2, self._image_size[1])
         
         l = left - (x_center - patch_size // 2)

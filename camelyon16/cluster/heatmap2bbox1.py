@@ -4,7 +4,7 @@ import os
 import argparse
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
-from camelyon16.cluster.utils import save_cropped_result
+from camelyon16.cluster.utils import save_point_based_cropped_result, save_patch_based_cropped_result
 
 """
 Code for DMnet, density crops generation
@@ -40,18 +40,18 @@ def parse_args():
     # args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/train', '50_50', '0.5'])
     # args.output_folder = '/media/ps/passport2/hhy/camelyon16/train/crop_split_l3'
 
-    # args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/test/images', 
-    #                           '/media/ps/passport2/hhy/camelyon16/test/dens_map_base_l8',
-    #                           '/media/ps/passport2/hhy/camelyon16/test/crop_split_2048_base_l1'])
+    # args = parser.parse_args(['/media/hy/hhy_data/camelyon16/test/images', 
+    #                           '/media/hy/hhy_data/camelyon16/test/dens_map_sampling_l8',
+    #                           '/media/hy/hhy_data/camelyon16/test/crop_split_2048_sampling_l1'])
     # args.max_window_size = '2048_2048'
     # args.min_window_size = '128_128'
     # args.dens_prob_thres = 0.1
 
-    args = parser.parse_args(['/media/hy/hhy_data/camelyon16/test/images', 
-                              '/media/hy/hhy_data/camelyon16/test/dens_map_base_l8',
-                              '/media/hy/hhy_data/camelyon16/test/crop_split_2048_base_l1'])
+    args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/test/images', 
+                              '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8',
+                              '/media/ps/passport2/hhy/camelyon16/test/crop_split_2048_min_300_sampling_l1'])
     args.max_window_size = '2048_2048'
-    args.min_window_size = '128_128'
+    args.min_window_size = '300'    # (275-75) / (0.243 * pow(2, 1))
     args.dens_prob_thres = 0.1
 
     return args
@@ -67,18 +67,16 @@ if __name__ == "__main__":
     output_level = int(args.output_path.split('l')[-1])
     img_array = glob.glob(f'{args.wsi_path}/*.tif')
 
-    densmap_path = args.densmap_path
-    densmap_level = int(args.densmap_path.split('l')[-1])
-
+    densmap_level = 6
+    densmap_path = os.path.join(args.densmap_path, 'model_l1', 'save_l3')
+    # densmap_path = args.densmap_path
+    
     anno_path = glob.glob(f'{densmap_path}/*.npy')
 
     if not os.path.exists(folder_name):
         os.makedirs(folder_name, exist_ok=False)
     max_window_size = args.max_window_size.split("_")
     max_window_size = (int(max_window_size[0]), int(max_window_size[1]))
-    min_window_size = args.min_window_size.split("_")
-    min_window_size = (int(min_window_size[0]), int(min_window_size[1]))
-    
-    
-    save_cropped_result(img_array, max_window_size, min_window_size, args.dens_prob_thres, \
-                        densmap_path, args.output_path, densmap_level, output_level)
+    min_window_size = int(args.min_window_size)
+    save_patch_based_cropped_result(img_array, max_window_size, min_window_size, args.dens_prob_thres, \
+                                            densmap_path, args.output_path, densmap_level, output_level)

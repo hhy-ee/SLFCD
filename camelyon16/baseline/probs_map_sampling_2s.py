@@ -133,7 +133,7 @@ def run(args):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         
-        tissue = np.load(os.path.join(os.path.dirname(args.probs_map_path), 'dens_map_{}'.format(args.roi_generator), file))
+        tissue = np.load(os.path.join(os.path.dirname(args.probs_map_path), 'dens_map_{}'.format(args.roi_generator), 'model_l1', 'save_l3', file))
         tissue_shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
         tissue = cv2.resize(tissue, (tissue_shape[1], tissue_shape[0]), interpolation=cv2.INTER_CUBIC)
         POI = (tissue / 255) > args.roi_threshold
@@ -149,7 +149,7 @@ def run(args):
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
         np.save(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                 'save_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+                                 'save_t0.1_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -160,7 +160,7 @@ def run(args):
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                   'save_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+                                   'save_t0.1_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -170,7 +170,9 @@ def main():
         "/media/ps/passport2/hhy/camelyon16/test/images",
         "/home/ps/hhy/slfcd/save_train/train_base_l1",
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l8'])
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6'])
+    args.roi_generator = 'sampling_l8'
+    args.roi_threshold = 0.1
     args.GPU = "0"
 
     # args = parser.parse_args([

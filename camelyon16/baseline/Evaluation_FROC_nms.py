@@ -228,11 +228,11 @@ if __name__ == "__main__":
     # configuration
     wsi_folder = '/media/ps/passport2/hhy/camelyon16/test/images'
     mask_folder = '/media/ps/passport2/hhy/camelyon16/test/tumor_mask_l5'
-    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_base_l6'
-    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8/model_l1/save_p128_l3'
+    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_base_l5'
+    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8/model_l1/save_p1024_l3'
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_2s_l6'
-    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6/model_base_l8_l1/save_l3'
-    result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_select_l6/model_l1/save_test3_l3/'
+    result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6/model_sampling_l8_l1/save_crop2048_min200_saliency_l3/'
+    # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_select_l6/model_l1/save_na_ns_l3'
     # result_folder = '/media/ps/passport1/hhy_data/camelyon16/test/dens_map_sampling_l8/model_l1/'
     
     # wsi_folder = '/media/hy/hhy_data/camelyon16/test/images/'
