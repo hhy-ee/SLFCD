@@ -231,7 +231,7 @@ if __name__ == "__main__":
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_base_l5'
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8/model_l1/save_p1024_l3'
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_2s_l6'
-    result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6/model_sampling_l8_l1/save_crop2048_min200_saliency_l3/'
+    result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6/model_distance_l1/save_min_200_fix_size_l3/'
     # result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_select_l6/model_l1/save_na_ns_l3'
     # result_folder = '/media/ps/passport1/hhy_data/camelyon16/test/dens_map_sampling_l8/model_l1/'
     

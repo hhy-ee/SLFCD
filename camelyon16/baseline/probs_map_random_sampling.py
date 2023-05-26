@@ -10,6 +10,8 @@ from skimage import transform
 import numpy as np
 import torch
 import openslide
+from scipy import ndimage as nd
+from skimage import measure
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from torchvision import models
@@ -32,14 +34,16 @@ parser.add_argument('ckpt_path', default=None, metavar='CKPT_PATH', type=str,
 parser.add_argument('cnn_path', default=None, metavar='CNN_PATH', type=str,
                     help='Path to the config file in json format related to'
                     ' the ckpt file')
-parser.add_argument('POI_path', default=None, metavar='PROBS_MAP_PATH',
-                    type=str, help='Path to the point of interest numpy file')
-parser.add_argument('probs_map_path', default=None, metavar='PROBS_MAP_PATH',
+parser.add_argument('prior_path', default=None, metavar='PRIOR_MAP_PATH',
+                    type=str, help='Path to the result of first stage numpy file')
+parser.add_argument('probs_path', default=None, metavar='PROBS_MAP_PATH',
                     type=str, help='Path to the output probs_map numpy file')
 parser.add_argument('--roi_generator', default='sampling_l8', metavar='ROI_GENERATOR',
                     type=str, help='type of the generator of the first stage')
 parser.add_argument('--roi_threshold', default=0.1, metavar='ROI_GENERATOR',
-                    type=float, help='type of the generator of the first stage')
+                    type=float, help='threshold of the generator of the first stage')
+parser.add_argument('--itc_threshold', default=100, metavar='ITC_THRESHOLD',
+                    type=float, help='threshold of the long axis of isolated tumor')
 parser.add_argument('--GPU', default='1', type=str, help='which GPU to use'
                     ', default 0')
 parser.add_argument('--num_workers', default=0, type=int, help='number of '
@@ -58,10 +62,15 @@ def chose_model(mod):
     return model
 
 
-def get_probs_map(model, slide, level, dataloader):
+def get_probs_map(model, slide, level, dataloader, prior=None):
 
-    probs_map = np.zeros(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
-    counter = np.zeros(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
+    shape = tuple([int(i / 2**level) for i in slide.level_dimensions[0]])
+    counter = np.zeros(shape)
+    if prior is not None:
+        probs_map = cv2.resize(prior, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC)/255
+    else:
+        probs_map = np.zeros(shape)
+    
     num_batch = len(dataloader)
 
     count = 0
@@ -97,12 +106,12 @@ def get_probs_map(model, slide, level, dataloader):
     return probs_map, time_total
 
 
-def make_dataloader(args, cnn, slide, tissue, level_sample, level_ckpt, flip='NONE', rotate='NONE'):
+def make_dataloader(args, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE'):
     batch_size = cnn['batch_inf_size']
     num_workers = args.num_workers
     
     dataloader = DataLoader(
-        WSIPatchDataset(slide, tissue, level_sample, level_ckpt, 
+        WSIPatchDataset(slide, prior, level_sample, level_ckpt, 
                         image_size=cnn['patch_inf_size'],
                         normalize=True, flip=flip, rotate=rotate),
         batch_size=batch_size, num_workers=num_workers, drop_last=False)
@@ -114,7 +123,7 @@ def run(args):
     # configuration
     level_save = 3
     level_show = 6
-    level_sample = int(args.probs_map_path.split('l')[-1])
+    level_sample = int(args.probs_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
@@ -130,16 +139,37 @@ def run(args):
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
     for file in sorted(dir)[94:128]:
-        # if os.path.exists(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
+        # if os.path.exists(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
         #                     'save_random_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         
-        POI = np.load(os.path.join(os.path.dirname(args.POI_path), file))
-        
+        # compute Point of Interest (POI)
+        first_stage_map = np.load(os.path.join(os.path.dirname(args.prior_path), file))
+        shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
+        first_stage_map = cv2.resize(first_stage_map, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC)
+        POI = (first_stage_map / 255) > args.roi_threshold
+        # Computes the inference mask
+        filled_image = nd.morphology.binary_fill_holes(POI)
+        evaluation_mask = measure.label(filled_image, connectivity=2)
+        # eliminate ITC
+        max_label = np.amax(evaluation_mask)
+        properties = measure.regionprops(evaluation_mask)
+        filled_mask = np.zeros(first_stage_map.shape) > 0
+        threshold = args.itc_threshold / (0.243 * pow(2, level_sample))
+        for i in range(0, max_label):
+            if properties[i].major_axis_length > threshold:
+                l, t, r, b = properties[i].bbox
+                filled_mask[l: r, t: b] = np.logical_or(filled_mask[l: r, t: b], properties[i].image_filled)
+        first_stage_map = first_stage_map * filled_mask
+        # generate distance map
+        POI = (first_stage_map / 255) > args.roi_threshold
+        distance, coord = nd.distance_transform_edt(POI, return_indices=True)
+        prior = (first_stage_map, distance, coord)
+
         # calculate heatmap & runtime
         dataloader = make_dataloader(
-            args, cnn, slide, POI, level_sample, level_ckpt, flip='NONE', rotate='NONE')
+            args, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
         probs_map, time_network = get_probs_map(model, slide, level_ckpt, dataloader)
         time_total += time_network
 
@@ -147,8 +177,8 @@ def run(args):
         probs_map = (probs_map * 255).astype(np.uint8)
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
-        np.save(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                 'save_min_200_fix_size_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+        np.save(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
+                                 'save_min_100_fix_size_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -158,8 +188,8 @@ def run(args):
         probs_img_rgb = cv2.applyColorMap(probs_map, cv2.COLORMAP_JET)
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
-        cv2.imwrite(os.path.join(args.probs_map_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                   'save_min_200_fix_size_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+        cv2.imwrite(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
+                                   'save_min_100_fix_size_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -169,10 +199,10 @@ def main():
         "/media/ps/passport2/hhy/camelyon16/test/images",
         "/home/ps/hhy/slfcd/save_train/train_base_l1",
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
-        '/media/ps/passport2/hhy/camelyon16/test/heatmap2box_result/crop_split_min_200_l1/',
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8/model_l1/save_l3/',
         '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6'])
     args.roi_generator = 'distance'
-    args.GPU = "1"
+    args.GPU = "0"
 
     # args = parser.parse_args([
     #     "/media/hy/hhy_data/camelyon16/train/tumor",

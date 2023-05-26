@@ -5,11 +5,30 @@ import PIL
 
 class WSIPatchDataset(Dataset):
 
-    def __init__(self, slide, POI, level_sample, level_ckpt, image_size=256,
+    def __init__(self, slide, prior, level_sample, level_ckpt, image_size=256,
                  normalize=True, flip='NONE', rotate='NONE'):
         self._slide = slide
-        self._POI = POI
-        self._tissue = POI > 0
+        first_stage_map = prior[0]
+        dist_from_edge = prior[1]
+        nearest_bg_coord = prior[2]
+        
+        self._tissue = dist_from_edge > 0
+        
+        # self._tissue = dist_from_edge == 1
+        # self._tissue[nearest_bg_coord[:, self._tissue][0], nearest_bg_coord[:, self._tissue][1]] = True
+        
+        self._distance = dist_from_edge * 2 ** (level_sample - level_ckpt)
+        
+        # import cv2
+        # img_rgb = slide.read_region((0, 0), level_sample, \
+        #             tuple([int(i/2**level_sample) for i in slide.level_dimensions[0]])).convert('RGB')
+        # img_rgb = np.asarray(img_rgb).transpose((1,0,2))
+        # map_rgb = cv2.applyColorMap(first_stage_map.astype(np.uint8), cv2.COLORMAP_JET)
+        # map_rgb = cv2.cvtColor(map_rgb, cv2.COLOR_BGR2RGB)
+        # heat_img = cv2.addWeighted(map_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
+        # heat_img[self._tissue.transpose(1, 0), :] = [0, 255, 0]
+        # cv2.imwrite('/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6/model_distance_l1/heat.png', heat_img)
+         
         self._level_sample = level_sample
         self._level_ckpt = level_ckpt
         self._patch_size = image_size

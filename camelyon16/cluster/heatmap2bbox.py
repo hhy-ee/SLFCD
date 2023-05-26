@@ -97,7 +97,6 @@ if __name__ == "__main__":
         # eliminate ITC
         max_label = np.amax(evaluation_mask)
         properties = measure.regionprops(evaluation_mask)
-        Isolated_Tumor_Cells = []
         filled_mask = np.zeros(tissue.shape) > 0
         threshold = args.ITC_threshold / (0.243 * pow(2, level_dens))
         for i in range(0, max_label):
@@ -124,6 +123,6 @@ if __name__ == "__main__":
         
         # distance map
         POI = (tissue / 255) > args.roi_threshold
-        distance = nd.distance_transform_edt(POI)
+        distance, coord = nd.distance_transform_edt(POI, return_indices=True)
         np.save(os.path.join(args.output_path, file), distance)
         
