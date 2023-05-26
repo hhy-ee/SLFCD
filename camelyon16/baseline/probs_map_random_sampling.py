@@ -62,12 +62,13 @@ def chose_model(mod):
     return model
 
 
-def get_probs_map(model, slide, level, dataloader, prior=None):
+def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
 
-    shape = tuple([int(i / 2**level) for i in slide.level_dimensions[0]])
+    shape = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
+    resolution = 2 ** (level_save - level_ckpt)
     counter = np.zeros(shape)
     if prior is not None:
-        probs_map = cv2.resize(prior, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC)/255
+        probs_map = cv2.resize(prior, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC) / 255
     else:
         probs_map = np.zeros(shape)
     
@@ -80,14 +81,17 @@ def get_probs_map(model, slide, level, dataloader, prior=None):
         for (data, rect, shape) in dataloader:
             data = Variable(data.cuda(non_blocking=True))
             output = model(data)
-            # because of torch.squeeze at the end of forward in resnet.py, if the
-            # len of dim_0 (batch_size) of data is 1, then output removes this dim.
-            # should be fixed in resnet.py by specifying torch.squeeze(dim=2) later
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
+
+            rect = [(item / resolution).to(torch.int) for item in rect]
+            shape = [(item / resolution).to(torch.int) for item in shape]
             for bs in range(probs.shape[0]):
-                counter[rect[0][bs]:rect[2][bs], rect[1][bs]:rect[3][bs]] += 1
-                probs_map[rect[0][bs]:rect[2][bs], rect[1][bs]:rect[3][bs]] += \
-                        probs[bs, 0, shape[0][bs]:shape[2][bs], shape[1][bs]:shape[3][bs]]
+                l, t, r, b = rect[0][bs], rect[1][bs], rect[2][bs], rect[3][bs]
+                r_l, r_t, r_r, r_b = shape[0][bs], shape[1][bs], shape[2][bs], shape[3][bs]
+                prob = transform.resize(probs[bs, 0], (r_r - r_l, r_b - r_t))
+                counter[l: r, t: b] += 1
+                probs_map[l: r, t: b] += prob
+
             count += 1
             time_spent = time.time() - time_now
             time_now = time.time()
@@ -138,7 +142,7 @@ def run(args):
     
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
-    for file in sorted(dir)[94:128]:
+    for file in sorted(dir)[111:128]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
         #                     'save_random_l{}'.format(level_save), file)):
         #     continue
@@ -170,7 +174,7 @@ def run(args):
         # calculate heatmap & runtime
         dataloader = make_dataloader(
             args, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
-        probs_map, time_network = get_probs_map(model, slide, level_ckpt, dataloader)
+        probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
         time_total += time_network
 
         # save heatmap
@@ -178,7 +182,7 @@ def run(args):
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
         np.save(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                 'save_min_100_fix_size_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+                                 'save_min_100_edge_2_fix_size_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -189,27 +193,20 @@ def run(args):
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                   'save_min_100_fix_size_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+                                   'save_min_100_edge_2_fix_size_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
 
 def main():
     args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/test/images",
-        "/home/ps/hhy/slfcd/save_train/train_base_l1",
-        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8/model_l1/save_l3/',
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6'])
+        "./datasets/test/images",
+        "./save_train/train_base_l1",
+        "./camelyon16/configs/cnn_base_l1.json",
+        './datasets/test/dens_map_sampling_l8/model_l1/save_l3/',
+        './datasets/test/dens_map_sampling_2s_l6'])
     args.roi_generator = 'distance'
-    args.GPU = "0"
-
-    # args = parser.parse_args([
-    #     "/media/hy/hhy_data/camelyon16/train/tumor",
-    #     "/media/ruiq/Data/hhy/SLFCD/save_train/train_base_l1",
-    #     "/media/ruiq/Data/hhy/SLFCD/camelyon16/configs/cnn_base_l1.json",
-    #     '/media/hy/hhy_data/camelyon16/train/dens_map_sampling_l8'])
-    # args.GPU = "1"
+    args.GPU = "3"
     
     run(args)
 

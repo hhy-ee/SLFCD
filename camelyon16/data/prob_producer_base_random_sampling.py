@@ -12,10 +12,10 @@ class WSIPatchDataset(Dataset):
         dist_from_edge = prior[1]
         nearest_bg_coord = prior[2]
         
-        self._tissue = dist_from_edge > 0
+        # self._tissue = dist_from_edge > 0
         
-        # self._tissue = dist_from_edge == 1
-        # self._tissue[nearest_bg_coord[:, self._tissue][0], nearest_bg_coord[:, self._tissue][1]] = True
+        self._tissue = dist_from_edge == 1
+        self._tissue[nearest_bg_coord[:, self._tissue][0], nearest_bg_coord[:, self._tissue][1]] = True
         
         self._distance = dist_from_edge * 2 ** (level_sample - level_ckpt)
         
