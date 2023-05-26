@@ -227,7 +227,7 @@ if __name__ == "__main__":
     # configuration
     wsi_folder = './datasets/test/images'
     mask_folder = './datasets/test/tumor_mask_l5'
-    result_folder = './datasets/test/dens_map_sampling_l8/model_l1/save_l3'
+    result_folder = './datasets/test/dens_map_sampling_2s_l6/model_distance_l1/save_min_100_edge_1_t_0.2_fix_size_l3'
 
     threshold = 0.5
     
@@ -256,21 +256,6 @@ if __name__ == "__main__":
         
         slide = openslide.open_slide(os.path.join(wsi_folder, case.split('.')[0] + '.tif'))
         result_mask = np.load(os.path.join(result_folder, case)) # 0~255 uint8
-        
-        POI = (result_mask / 255) > 0.1
-        # Computes the inference mask
-        filled_image = nd.morphology.binary_fill_holes(POI)
-        eval_mask = measure.label(filled_image, connectivity=2)
-        # eliminate ITC
-        max_label = np.amax(eval_mask)
-        properties = measure.regionprops(eval_mask)
-        filled_mask = np.zeros(result_mask.shape) > 0
-        itc_threshold = 100 / (0.243 * pow(2, 1))
-        for i in range(0, max_label):
-            if properties[i].major_axis_length > itc_threshold:
-                l, t, r, b = properties[i].bbox
-                filled_mask[l: r, t: b] = np.logical_or(filled_mask[l: r, t: b], properties[i].image_filled)
-        result_mask = result_mask * filled_mask
         
         if result_mask.dtype.name == 'float64':
             result_mask = (result_mask * 255).astype(np.uint8)

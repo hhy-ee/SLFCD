@@ -66,11 +66,12 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
 
     shape = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
     resolution = 2 ** (level_save - level_ckpt)
-    counter = np.zeros(shape)
     if prior is not None:
         probs_map = cv2.resize(prior, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC) / 255
+        counter = np.ones(shape)
     else:
         probs_map = np.zeros(shape)
+        counter = np.zeros(shape)
     
     num_batch = len(dataloader)
 
@@ -149,7 +150,7 @@ def run(args):
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         
         # compute Point of Interest (POI)
-        first_stage_map = np.load(os.path.join(os.path.dirname(args.prior_path), file))
+        first_stage_map = np.load(os.path.join(args.prior_path, file))
         shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
         first_stage_map = cv2.resize(first_stage_map, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC)
         POI = (first_stage_map / 255) > args.roi_threshold
@@ -182,7 +183,7 @@ def run(args):
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
         np.save(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                 'save_min_100_edge_2_fix_size_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+                                 'save_roit_0.0_min_100_edge_1_t_0.1_fix_size_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -193,7 +194,7 @@ def run(args):
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                   'save_min_100_edge_2_fix_size_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+                                   'save_roit_0.0_min_100_edge_1_t_0.1_fix_size_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -206,6 +207,7 @@ def main():
         './datasets/test/dens_map_sampling_l8/model_l1/save_l3',
         './datasets/test/dens_map_sampling_2s_l6'])
     args.roi_generator = 'distance'
+    args.roi_threshold = 0
     args.GPU = "3"
     
     run(args)

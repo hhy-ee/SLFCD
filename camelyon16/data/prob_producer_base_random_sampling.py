@@ -12,12 +12,9 @@ class WSIPatchDataset(Dataset):
         dist_from_edge = prior[1]
         nearest_bg_coord = prior[2]
         
-        # self._tissue = dist_from_edge > 0
-        
-        self._tissue = dist_from_edge == 1
-        self._tissue[nearest_bg_coord[:, self._tissue][0], nearest_bg_coord[:, self._tissue][1]] = True
-        
-        self._distance = dist_from_edge * 2 ** (level_sample - level_ckpt)
+        self._prior = first_stage_map
+        # self._tissue = dist_from_edge == 1
+        self._tissue = (dist_from_edge == 1) * (first_stage_map / 255 < 0.1)
         
         # import cv2
         # img_rgb = slide.read_region((0, 0), level_sample, \
@@ -52,8 +49,8 @@ class WSIPatchDataset(Dataset):
         x_center = int(x_mask * self._resolution)
         y_center = int(y_mask * self._resolution)
 
-        # patch_prob = self._saliency[x_center-128:x_center+128, y_center-128:y_center+128].mean() / 255
-        # patch_size = int(256 / 2** (np.abs(patch_prob - 0.5) * 5)) // 2 * 2
+        # patch_prob = self._prior[x_mask, y_mask] / 255
+
         patch_size = self._patch_size
         
         x = int((x_center - patch_size / 2) * self._slide.level_downsamples[self._level_ckpt])
