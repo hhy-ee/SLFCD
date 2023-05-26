@@ -203,7 +203,7 @@ def main():
         "./datasets/test/images",
         "./save_train/train_base_l1",
         "./camelyon16/configs/cnn_base_l1.json",
-        './datasets/test/dens_map_sampling_l8/model_l1/save_l3/',
+        './datasets/test/dens_map_sampling_l8/model_l1/save_l3',
         './datasets/test/dens_map_sampling_2s_l6'])
     args.roi_generator = 'distance'
     args.GPU = "3"
