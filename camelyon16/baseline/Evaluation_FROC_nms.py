@@ -227,7 +227,7 @@ if __name__ == "__main__":
     # configuration
     wsi_folder = './datasets/test/images'
     mask_folder = './datasets/test/tumor_mask_l5'
-    result_folder = './datasets/test/dens_map_sampling_2s_l6/model_distance_l1/save_min_100_edge_1_t_0.2_fix_size_l3'
+    result_folder = './datasets/test/dens_map_sampling_2s_l6/model_distance_l1/save_min_100_dyn_size_alg_l3/'
 
     threshold = 0.5
     
@@ -284,7 +284,7 @@ if __name__ == "__main__":
     total_FPs, total_sensitivity = computeFROC(FROC_data)
 
     # plot FROC curve
-    plotFROC(total_FPs, total_sensitivity)
+    # plotFROC(total_FPs, total_sensitivity)
 
     eval_threshold = [.25, .5, 1, 2, 4, 8]
     eval_TPs = np.interp(eval_threshold, total_FPs[::-1], total_sensitivity[::-1])
