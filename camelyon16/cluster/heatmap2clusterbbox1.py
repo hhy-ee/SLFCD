@@ -14,7 +14,7 @@ from PIL import ImageDraw
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 
 from camelyon16.cluster.utils import NMM
-from camelyon16.data.probs_ops_ import extractor_features
+from camelyon16.data.probs_ops import extractor_features
 
 """
 Code for DMnet, density crops generation

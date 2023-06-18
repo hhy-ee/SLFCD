@@ -6,6 +6,7 @@ import openslide
 import numpy as np
 from PIL import Image
 from PIL import ImageDraw
+from scipy import ndimage as nd
 from torch.utils.data import Dataset
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
@@ -28,8 +29,8 @@ class WSIPatchDataset(Dataset):
     def _pre_process(self):
         self._image_size = tuple([int(i / 2**self._level_ckpt) for i in self._slide.level_dimensions[0]])
         self.first_stage_map, self.dist_from_edge, self.nearest_bg_coord = self._prior
-        # self._POI = (self.dist_from_edge = 1) * (self.first_stage_map / 255 < 0.2)
-        self._POI = self.dynamic_sliding_window()
+        self._POI = (self.dist_from_edge == 1)
+        # self._POI = self.dynamic_sliding_window(nmm_threshold=0.3)
         self._resolution = 2 ** (self._level_sample - self._level_ckpt)
         self._X_idcs, self._Y_idcs = np.where(self._POI)
         self._idcs_num = len(self._X_idcs)
@@ -79,9 +80,10 @@ class WSIPatchDataset(Dataset):
         y_center = int(y_mask * self._resolution)
 
         # save_min_100_fix_size_alg_l3
-        # patch_size = self._patch_size
+        patch_size = self._patch_size
         # save_min_100_dyn_size_alg_l3
-        patch_size = self._POI[self._X_idcs, self._Y_idcs] * self._resolution
+        # para = self._POI[self._X_idcs, self._Y_idcs].min() + 8
+        # patch_size = (para - self._POI[x_mask, y_mask]) * self._resolution
         
         x = int((x_center - patch_size // 2) * self._slide.level_downsamples[self._level_ckpt])
         y = int((y_center - patch_size // 2) * self._slide.level_downsamples[self._level_ckpt])

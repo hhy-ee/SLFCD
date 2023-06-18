@@ -123,6 +123,7 @@ def make_dataloader(args, cnn, slide, prior, level_sample, level_ckpt, flip='NON
 
     return dataloader
 
+# 34.89
 
 def run(args):
     # configuration

@@ -6,9 +6,7 @@ import openslide
 import numpy as np
 import pandas as pd
 import cv2
-
-sys.path.append(os.path.dirname(os.path.abspath(__file__) + '/../../'))
-
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 from camelyon16.data.probs_ops import extractor_features
 
 parser = argparse.ArgumentParser(description='Extract features from probability map'
@@ -80,7 +78,7 @@ def run(args):
     slide_path = args.wsi_path
 
     probs_map = np.load(args.probs_map_path)
-
+    
     extractor = extractor_features(probs_map, slide_path)
 
     features = compute_features(extractor)
@@ -100,7 +98,9 @@ def run(args):
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    args = parser.parse_args()
+    args = parser.parse_args(['./datasets/test/dens_map_sampling_l8/model_l1/save_l3/test_001.npy',
+                              './datasets/test/images/test_001.tif',
+                              './datasets/test/heatmap2box_result/test_001'])
     run(args)
 
 
