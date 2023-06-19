@@ -54,21 +54,12 @@ def parse_args():
     parser.add_argument('--fea_threshold', help='The threshold to generate feature')
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
-    # args = parser.parse_args(['/media/ps/passport2/hhy/camelyon16/train', '50_50', '0.5'])
-    # args.output_folder = '/media/ps/passport2/hhy/camelyon16/train/crop_split_l3'
 
-    # args = parser.parse_args(['/media/hy/hhy_data/camelyon16/test/images', 
-    #                           '/media/hy/hhy_data/camelyon16/test/dens_map_sampling_l8',
-    #                           '/media/hy/hhy_data/camelyon16/test/crop_split_2048_sampling_l1'])
-    # args.max_window_size = '2048_2048'
-    # args.min_window_size = '128_128'
-    # args.dens_prob_thres = 0.1
-
-    args = parser.parse_args(['./datasets/test/images', 
-                              './datasets/test/dens_map_sampling_l8',
-                              './datasets/test/heatmap2box_result/crop_split_min_100_l1'])
+    args = parser.parse_args(['./datasets/train/tumor', 
+                              './datasets/train/dens_map_sampling_l8',
+                              './datasets/train/crop_split_feath_0.5_l1'])
     args.roi_generator = 'sampling_l8'
-    args.roi_threshold = 0.1
+    args.roi_threshold = 0.5
     args.itc_threshold = 100    # ITC_threshold / (0.243 * pow(2, level))
     args.ini_patchsize = 8
     args.nms_threshold = 0.3

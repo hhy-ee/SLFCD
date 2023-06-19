@@ -4,7 +4,7 @@
   "image_size": 256,
   "crop_size": 256,
   "patch_inf_size": 256,
-  "batch_inf_size": 1,
+  "batch_inf_size": 20,
   "normalize": "True",
   "lr": 0.001,
   "momentum": 0.9,
