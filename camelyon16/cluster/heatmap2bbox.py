@@ -65,6 +65,7 @@ def parse_args():
     args.nms_threshold = 0.3
     args.nmm_threshold = 0.1
     args.fea_threshold = 0.5
+    args.image_show = False
     return args
 
 if __name__ == "__main__":

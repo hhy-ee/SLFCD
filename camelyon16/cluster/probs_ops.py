@@ -38,6 +38,8 @@ class extractor_features(object):
         for index in range(n_regions):
             tumor_area += region_props[index]['area']
 
+        if tissue_area == 0:
+            return 0.0
         return float(tumor_area) / tissue_area
 
     def get_largest_tumor_index(self, region_props):
