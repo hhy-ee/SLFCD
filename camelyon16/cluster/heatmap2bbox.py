@@ -55,17 +55,17 @@ def parse_args():
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/train/tumor', 
-                              './datasets/train/dens_map_sampling_l8',
-                              './datasets/train/crop_split_feath_0.5_l1'])
+    args = parser.parse_args(['./datasets/test/images', 
+                              './datasets/test/dens_map_sampling_l8',
+                              './datasets/test/crop_split_l1'])
     args.roi_generator = 'sampling_l8'
-    args.roi_threshold = 0.5
+    args.roi_threshold = 0.1
     args.itc_threshold = 100    # ITC_threshold / (0.243 * pow(2, level))
     args.ini_patchsize = 8
     args.nms_threshold = 0.3
     args.nmm_threshold = 0.1
     args.fea_threshold = 0.5
-    args.image_show = False
+    args.image_show = True
     return args
 
 if __name__ == "__main__":
@@ -129,6 +129,19 @@ if __name__ == "__main__":
             cv2.imwrite(os.path.join(args.output_path, file.split('.')[0] + '_edge.png'), prior_heat)
         
         # boxes = []
+        # scale_save = 2 ** (level_prior - level_output)
+        # for idx in range(0, len(edge_X)):
+        #     x_center, y_center = edge_X[idx], edge_Y[idx]
+        #     patch_size = np.random.randint(2,9) * 32 // scale_save
+        #     l, t = x_center - patch_size // 2, y_center - patch_size // 2
+        #     r, b = x_center + patch_size // 2, y_center + patch_size // 2
+        #     pos_idx = np.where(filled_mask[l: r, t: b])
+        #     scr = prior_map[l: r, t: b][pos_idx].mean()
+        #     boxes.append([l, t, r, b, patch_size, scr])
+        # boxes_dyn = [[int(i[0] * scale_save), int(i[1] * scale_save), \
+        #                 int(i[2]* scale_save), int(i[3]* scale_save), i[5]] for i in boxes]
+        
+        # boxes = []
         # edge_map = (distance == 1)
         # for idx in range(0, len(edge_X)):
         #     x_center, y_center = edge_X[idx], edge_Y[idx]
@@ -139,12 +152,17 @@ if __name__ == "__main__":
         #         l, t = x_center - ini_size // 2, y_center - ini_size // 2
         #     scr = prior_map[x_center, y_center]
         #     boxes.append([l, t, ini_size, scr, x_center, y_center])
-        
+
         boxes = []
         scale_save = 2 ** (level_prior - level_output)
+        grad_x = cv2.Sobel(prior_map, cv2.CV_16S, 1, 0, ksize=3, scale=1, delta=0, borderType=cv2.BORDER_DEFAULT)
+        grad_y = cv2.Sobel(prior_map, cv2.CV_16S, 0, 1, ksize=3, scale=1, delta=0, borderType=cv2.BORDER_DEFAULT)
+        abs_grad_x = cv2.convertScaleAbs(grad_x)
+        abs_grad_y = cv2.convertScaleAbs(grad_y)
+        grad = cv2.addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0)
         for idx in range(0, len(edge_X)):
             x_center, y_center = edge_X[idx], edge_Y[idx]
-            patch_size = np.random.randint(2,9) * 32 // scale_save
+            patch_size = 16 - grad[edge_X[idx], edge_Y[idx]] // 16
             l, t = x_center - patch_size // 2, y_center - patch_size // 2
             r, b = x_center + patch_size // 2, y_center + patch_size // 2
             pos_idx = np.where(filled_mask[l: r, t: b])
@@ -241,3 +259,7 @@ if __name__ == "__main__":
                 if args.label_save: 
                     np.save(os.path.join(args.output_path, 'cluster_mask', \
                                         '{}_clu_{}_chi_{}.npy'.format(os.path.basename(file).split('.')[0], i, j)), dens_patch)
+
+        save_dict.update({file.split('.npy')[0]: cluster_boxes_dict})
+    with open(os.path.join(args.output_path, 'results.json'), 'w') as result_file:
+        json.dump(save_dict, result_file)
