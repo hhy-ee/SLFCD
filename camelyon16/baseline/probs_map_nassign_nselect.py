@@ -17,7 +17,6 @@ from torchvision import models
 from torch import nn
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
-from camelyon16.cluster.utils import generate_crop
 
 torch.manual_seed(0)
 torch.cuda.manual_seed_all(0)
@@ -147,7 +146,7 @@ def run(args):
         # if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), 'save_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
-        
+
         first_stage_map = np.load(os.path.join(args.prior_path, file))
         shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
         first_stage_map = cv2.resize(first_stage_map, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC)
@@ -155,7 +154,7 @@ def run(args):
         assign_per_img = assign[file.split('.')[0]]
 
         if len(assign_per_img) == 0:
-            probs_map = np.zeros(tuple([int(i / 2**level_ckpt) for i in slide.level_dimensions[0]]))
+            probs_map = np.zeros(tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]]))
         else:
             dataloader = make_dataloader(
                 args, cnn, slide, level_ckpt, assign_per_img, flip='NONE', rotate='NONE')
@@ -193,7 +192,6 @@ def main():
         './datasets/test/dens_map_sampling_2s_l6'])
     args.batch_inf = False
     args.GPU = "1"
-    
     run(args)
 
 

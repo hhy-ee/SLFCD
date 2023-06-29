@@ -269,6 +269,12 @@ if __name__ == "__main__":
         # feature extraction
         ext_shape = tuple([int(i / 2**level_output) for i in slide.level_dimensions[0]])
         feature_map = cv2.resize(first_stage_map, (ext_shape[1], ext_shape[0]), interpolation=cv2.INTER_CUBIC)
+        wsi_slide = slide.read_region((0, 0), level_prior, prior_shape)
+        extractor = extractor_features(prior_map, wsi_slide)
+        wsi_features = compute_features(extractor, args.fea_threshold)
+        scale_feature = 2 ** (level_prior - level_output)
+        wsi_features['pixels_tumor'] = wsi_features['pixels_tumor'] * scale_feature,
+        wsi_features['intensity_tumor'] = wsi_features['intensity_tumor'] * scale_feature 
         for i, cluster in enumerate(nmm_boxes_dict):
             clu_box = cluster['cluster']
             dens_patch = feature_map[clu_box[0]: clu_box[0]+clu_box[2], clu_box[1]: clu_box[1]+clu_box[3]]
@@ -276,21 +282,21 @@ if __name__ == "__main__":
                                             int(clu_box[1]* slide.level_downsamples[level_output])), \
                                             level_output, (clu_box[2], clu_box[3]))
             # feature 1
-            total_area, num_object = 0, 0
-            for obj in dens_patch:
-                total_area += int((obj > 0.5).sum())
-                if (obj > 0.5).sum() > 0:
-                    num_object += 1
-            if num_object != 0:
-                avg_area = total_area / num_object
-            else:
-                avg_area = total_area
-            cluster.update({"total_area": total_area, "avg_area": avg_area, "num_object": num_object})
+            # total_area, num_object = 0, 0
+            # for obj in dens_patch:
+            #     total_area += int((obj > 0.5).sum())
+            #     if (obj > 0.5).sum() > 0:
+            #         num_object += 1
+            # if num_object != 0:
+            #     avg_area = total_area / num_object
+            # else:
+            #     avg_area = total_area
+            # cluster.update({"total_area": total_area, "avg_area": avg_area, "num_object": num_object})
             
             # # feature 2
-            # extractor = extractor_features(dens_patch, slide_patch)
-            # features = compute_features(extractor, args.fea_threshold)
-            # cluster.update(features)
+            extractor = extractor_features(dens_patch, slide_patch)
+            features = compute_features(extractor, args.fea_threshold)
+            cluster.update(features)
             
             # plot & save
             if args.image_show:
@@ -312,21 +318,21 @@ if __name__ == "__main__":
                                             int(chi_box[1]* slide.level_downsamples[level_output])), \
                                             level_output, (chi_box[2], chi_box[3]))
                 # feature 1
-                total_area, num_object = 0, 0
-                for obj in dens_patch:
-                    total_area += int((obj > 0.5).sum())
-                    if (obj > 0.5).sum() > 0:
-                        num_object += 1
-                if num_object != 0:
-                    avg_area = total_area / num_object
-                else:
-                    avg_area = total_area
-                child.update({"total_area": total_area, "avg_area": avg_area, "num_object": num_object})                
+                # total_area, num_object = 0, 0
+                # for obj in dens_patch:
+                #     total_area += int((obj > 0.5).sum())
+                #     if (obj > 0.5).sum() > 0:
+                #         num_object += 1
+                # if num_object != 0:
+                #     avg_area = total_area / num_object
+                # else:
+                #     avg_area = total_area
+                # child.update({"total_area": total_area, "avg_area": avg_area, "num_object": num_object})                
                 
                 # # feature 2
-                # extractor = extractor_features(dens_patch, slide_patch)
-                # features = compute_features(extractor, args.fea_threshold)
-                # child.update(features)
+                extractor = extractor_features(dens_patch, slide_patch)
+                features = compute_features(extractor, args.fea_threshold)
+                child.update(features)
                 
                 # plot
                 if args.image_show:
@@ -340,7 +346,8 @@ if __name__ == "__main__":
                 if args.label_save: 
                     np.save(os.path.join(args.output_path, 'cluster_mask', \
                                         '{}_clu_{}_chi_{}.npy'.format(os.path.basename(file).split('.')[0], i, j)), dens_patch)
-
+                    
+        nmm_boxes_dict = [wsi_features] + nmm_boxes_dict
         save_dict.update({file.split('.npy')[0]: nmm_boxes_dict})
     with open(os.path.join(args.output_path, 'results.json'), 'w') as result_file:
         json.dump(save_dict, result_file)

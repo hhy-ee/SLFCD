@@ -17,7 +17,6 @@ from torchvision import models
 from torch import nn
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
-from camelyon16.cluster.utils import generate_crop
 
 torch.manual_seed(0)
 torch.cuda.manual_seed_all(0)
@@ -34,15 +33,17 @@ parser.add_argument('ckpt_path', default=None, metavar='CKPT_PATH', type=str,
 parser.add_argument('cnn_path', default=None, metavar='CNN_PATH', type=str,
                     help='Path to the config file in json format related to'
                     ' the ckpt file')
-parser.add_argument('probs_map_path', default=None, metavar='PROBS_MAP_PATH',
+parser.add_argument('prior_path', default=None, metavar='PRIOR_MAP_PATH',
+                    type=str, help='Path to the result of first stage numpy file')
+parser.add_argument('assign_path', default=None, metavar='ASSIGN_PATH',
+                    help='Path to the result of assignment numpy file')
+parser.add_argument('probs_path', default=None, metavar='PROBS_MAP_PATH',
                     type=str, help='Path to the output probs_map numpy file')
-parser.add_argument('assign_path', default=None, metavar='ASSIGN_PATH', type=str,
-                    help='Path to the json file related to assignment of patch')
-parser.add_argument('--GPU', default='2', type=str, help='which GPU to use'
+parser.add_argument('--GPU', default='0', type=str, help='which GPU to use'
                     ', default 0')
 parser.add_argument('--num_workers', default=0, type=int, help='number of '
                     'workers to use to make batch, default 5')
-parser.add_argument('--subdivisions', default=0, type=int, help='whether to'
+parser.add_argument('--overlap', default=0, type=int, help='whether to'
                     'use slide window paradigm with overlap.')
 parser.add_argument('--eight_avg', default=0, type=int, help='if using average'
                     ' of the 8 direction predictions for each patch,'
@@ -56,10 +57,17 @@ def chose_model(mod):
     return model
 
 
-def get_probs_map(model, slide, level, dataloader):
+def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
 
-    probs_map = np.zeros(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
-    counter = np.zeros(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
+    shape = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
+    resolution = 2 ** (level_save - level_ckpt)
+    if prior is not None:
+        probs_map = cv2.resize(prior, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC) / 255
+        counter = np.ones(shape)
+    else:
+        probs_map = np.zeros(shape)
+        counter = np.zeros(shape)
+
     num_batch = len(dataloader)
 
     count = 0
@@ -70,10 +78,9 @@ def get_probs_map(model, slide, level, dataloader):
         for (data, box, moved_box) in dataloader:
             data = Variable(data.cuda(non_blocking=True))
             output = model(data)
-            # because of torch.squeeze at the end of forward in resnet.py, if the
-            # len of dim_0 (batch_size) of data is 1, then output removes this dim.
-            # should be fixed in resnet.py by specifying torch.squeeze(dim=2) later
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
+            box = box // resolution
+            
             for i in range(probs.shape[0]):
                 for j in range(box.shape[1]):
                     counter[box[i][j][0]:box[i][j][2], box[i][j][1]:box[i][j][3]] += 1
@@ -81,6 +88,7 @@ def get_probs_map(model, slide, level, dataloader):
                     if patch_prob.shape != (0,0):
                         patch_prob = transform.resize(patch_prob, (box[i][j][2]-box[i][j][0], box[i][j][3]-box[i][j][1]))
                         probs_map[box[i][j][0]:box[i][j][2], box[i][j][1]:box[i][j][3]] += patch_prob
+
             count += 1
             time_spent = time.time() - time_now
             time_now = time.time()
@@ -90,7 +98,7 @@ def get_probs_map(model, slide, level, dataloader):
                     time.strftime("%Y-%m-%d %H:%M:%S"), dataloader.dataset._flip,
                     dataloader.dataset._rotate, count, num_batch, time_spent))
             time_total += time_spent
-        
+
         zero_mask = counter == 0
         probs_map[~zero_mask] = probs_map[~zero_mask] / counter[~zero_mask]
         del counter
@@ -116,7 +124,7 @@ def run(args):
     # configuration
     level_save = 3
     level_show = 6
-    level_sample = int(args.probs_map_path.split('l')[-1])
+    level_sample = int(args.probs_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
@@ -134,31 +142,34 @@ def run(args):
 
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
-    for file in sorted(dir):
+    for file in sorted(dir)[77:84]:
         # if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
-        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample), file))
 
+        first_stage_map = np.load(os.path.join(args.prior_path, file))
+        shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
+        first_stage_map = cv2.resize(first_stage_map, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC)
+        
         assign_per_img = []
         for item in assign:
-            if item['file_name'] == os.path.join(args.wsi_path.split('/')[-1], file.split('.')[0]+'.tif'):
+            if item['file_name'] == file.split('.')[0]:
                 assign_per_img.append(item)
 
         if len(assign_per_img) == 0:
-            probs_map = np.zeros(tuple([int(i / 2**level_ckpt) for i in slide.level_dimensions[0]]))
+            probs_map = np.zeros(tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]]))
         else:
             dataloader = make_dataloader(
                 args, cnn, slide, level_ckpt, assign_per_img, flip='NONE', rotate='NONE')
-            probs_map, time_network = get_probs_map(model, slide, level_ckpt, dataloader)
+            probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
             time_total += time_network
         
         # save heatmap
         probs_map = (probs_map * 255).astype(np.uint8)
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
-        np.save(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), \
-                                 'save_base_4096_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+        np.save(os.path.join(args.probs_path, 'model_l{}'.format(level_ckpt), \
+                                 'save_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -168,27 +179,20 @@ def run(args):
         probs_img_rgb = cv2.applyColorMap(probs_map, cv2.COLORMAP_JET)
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
-        cv2.imwrite(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), \
-                                   'save_base_4096_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+        cv2.imwrite(os.path.join(args.probs_path, 'model_l{}'.format(level_ckpt), \
+                                   'save_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
 
 def main():
-    # args = parser.parse_args([
-    #     "/media/ps/passport2/hhy/camelyon16/train/tumor",
-    #     "/home/ps/hhy/slfcd/save_train/train_base_l2/best.ckpt",
-    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l2.json",
-    #     '/media/ps/passport2/hhy/camelyon16/train/dens_map_assign_l2',
-    #     "/media/ps/passport2/hhy/camelyon16/train/trainset_move.json"])
-    # args.GPU = "2"
-
     args = parser.parse_args([
-        "/media/hy/hhy_data/camelyon16/test/images",
-        "/home/cka/hhy/slfcd/save_train/train_base_l1",
-        "/home/cka/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
-        '/media/hy/hhy_data/camelyon16/test/dens_map_assign_l6',
-        "/media/hy/hhy_data/camelyon16/test/testset_assign_and_move_base_4096.json"])
+        "./datasets/test/images",
+        "./save_train/train_base_l1",
+        "./camelyon16/configs/cnn_base_l1.json",
+        './datasets/test/dens_map_sampling_l8/model_l1/save_l3',
+        "./datasets/test/crop_split_l1/assign.json",
+        './datasets/test/dens_map_assign_l6'])
     args.GPU = "2"
     run(args)
 

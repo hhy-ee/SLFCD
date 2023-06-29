@@ -1,8 +1,10 @@
 import os
+import sys
 import cv2
 import PIL
 import numpy as np
 from torch.utils.data import Dataset
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 
 class WSIPatchDataset(Dataset):
 
@@ -59,7 +61,7 @@ class WSIPatchDataset(Dataset):
             patch = np.asarray(patch).transpose((1, 0, 2))
             patch = cv2.resize(patch, (int_h, int_w), interpolation=cv2.INTER_CUBIC)
             img[moved_boxes[i, 0]: moved_boxes[i, 2], moved_boxes[i, 1]: moved_boxes[i, 3]] = patch
-            # cv2.imwrite('/media/hy/hhy_data/camelyon16/test/dens_map_assign_l6/model_l1/{}.png'.format(idx), img.astype(np.uint8))
+        # cv2.imwrite('./datasets/test/dens_map_assign_l6/model_l1/{}.png'.format(idx), img.astype(np.uint8))
 
         if self._flip == 'FLIP_LEFT_RIGHT':
             img = img.transpose(PIL.Image.FLIP_LEFT_RIGHT)
