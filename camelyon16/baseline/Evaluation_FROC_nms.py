@@ -227,8 +227,8 @@ if __name__ == "__main__":
     # configuration
     wsi_folder = './datasets/test/images'
     mask_folder = './datasets/test/tumor_mask_l5'
-    result_folder = './datasets/test/dens_map_sampling_l8/model_l1/save_l3'
-
+    # result_folder = './datasets/test/dens_map_sampling_l8/model_l1/save_l3'
+    result_folder = './datasets/test/dens_map_sampling_2s_l6/model_distance_l1/save_roi_th_0.1_nms_th_0.7_min_100_max_500_dyn2_size_256_non_holes_l3'
     threshold = 0.5
     
     # default setting
@@ -250,7 +250,7 @@ if __name__ == "__main__":
 
     caseNum = 0
     
-    for case in tqdm(result_file_list, total=len(result_file_list)):
+    for case in tqdm(sorted(result_file_list), total=len(result_file_list)):
         # print('Evaluating Performance on image:', case[0:-4])
         # sys.stdout.flush()
         
@@ -278,6 +278,27 @@ if __name__ == "__main__":
         detection_summary[0][caseNum] = case
         FROC_data[1][caseNum], FROC_data[2][caseNum], FROC_data[3][caseNum], detection_summary[1][caseNum], \
         FP_summary[1][caseNum] = compute_FP_TP_Probs(Ycorr, Xcorr, Probs, is_tumor, evaluation_mask, ITC_labels)
+
+        # # plot
+        # s = 2 ** (EVALUATION_MASK_LEVEL - PREDICT_MASK_LEVEL)
+        # result_folder_2s = './datasets/test/dens_map_sampling_2s_l6/model_distance_l1/save_roi_th_0.1_min_100_max_500_fix_size_256_non_holes_l3'
+        # img_heat = cv2.imread(os.path.join(result_folder, case.split('.')[0]+'_heat.png'))
+        # result_mask = np.load(os.path.join(result_folder_2s, case))
+        # result_mask = cv2.resize(result_mask.astype(np.uint8), (scale[1], scale[0]), interpolation=cv2.INTER_CUBIC)
+        # Probs, Xcorr, Ycorr = NMS(result_mask, threshold, PREDICT_MASK_LEVEL, EVALUATION_MASK_LEVEL, base_radius=3)
+        # _, _, _, _, FP_summary_2s = compute_FP_TP_Probs(Ycorr, Xcorr, Probs, is_tumor, evaluation_mask, ITC_labels)
+        # for fp in FP_summary[1][caseNum]:
+        #     patch_size = 8
+        #     x, y = FP_summary[1][caseNum][fp][1], FP_summary[1][caseNum][fp][2]
+        #     l, t, r, b = x*s-patch_size//2, y*s-patch_size//2, x*s+patch_size//2, y*s+patch_size//2
+        #     cv2.rectangle(img_heat, (int(l), int(t)), (int(r), int(b)), (255,0,0), 1)
+        # for fp in FP_summary_2s:
+        #     patch_size = 12
+        #     x, y = FP_summary_2s[fp][1], FP_summary_2s[fp][2]
+        #     l, t, r, b = x*s-patch_size//2, y*s-patch_size//2, x*s+patch_size//2, y*s+patch_size//2
+        #     cv2.rectangle(img_heat, (int(l), int(t)), (int(r), int(b)), (0,255,0), 1)
+        # cv2.imwrite(os.path.join(os.path.dirname(result_folder), 'froc_result', case.split('.')[0] + '_fp.png'), img_heat)
+        
         caseNum += 1
 
     # Compute FROC curve

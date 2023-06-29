@@ -31,11 +31,12 @@ class WSIPatchDataset(Dataset):
 
     def _pre_process(self):
         self._image_size = tuple([int(i / 2**self._level_ckpt) for i in self._slide.level_dimensions[0]])
-        self.first_stage_map, self.dist_from_edge, self.nearest_bg_coord = self._prior
+        self.first_stage_map, self.dist_from_edge, self.nearest_bg_coord, self.feature_region_conf = self._prior
         
-        # self._POI = (self.dist_from_edge == 1)
+        self._POI = (self.dist_from_edge == 1)
+        # self._POI = (self.dist_from_edge == 1) * (9 - self.feature_region_conf // 32)
         # self._POI = self.dynamic_sliding_window1(nmm_threshold=0.3)
-        self._POI = self.dynamic_sliding_window2()
+        # self._POI = self.dynamic_sliding_window2()
         
         self._resolution = 2 ** (self._level_sample - self._level_ckpt)
         self._X_idcs, self._Y_idcs = np.where(self._POI)
@@ -75,7 +76,7 @@ class WSIPatchDataset(Dataset):
         abs_grad_x = cv2.convertScaleAbs(grad_x)
         abs_grad_y = cv2.convertScaleAbs(grad_y)
         grad = cv2.addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0)
-        POI = (self.dist_from_edge == 1) * (8 - grad // 32)
+        POI = (self.dist_from_edge == 1) * (16 - grad // 16)
         
         # cv2.imwrite(os.path.join(self._args.probs_path, self._file.split('.')[0] + '_grad.png'), grad.transpose(1,0))
         
@@ -135,10 +136,8 @@ class WSIPatchDataset(Dataset):
         x_center = int(x_mask * self._resolution)
         y_center = int(y_mask * self._resolution)
 
-
-        # patch_size = self._patch_size
-
-        patch_size = self._POI[x_mask, y_mask] * self._resolution
+        patch_size = self._patch_size
+        # patch_size = self._POI[x_mask, y_mask] * self._resolution
         
         x = int((x_center - patch_size // 2) * self._slide.level_downsamples[self._level_ckpt])
         y = int((y_center - patch_size // 2) * self._slide.level_downsamples[self._level_ckpt])
@@ -166,15 +165,13 @@ class WSIPatchDataset(Dataset):
             img = (img - 128.0) / 128.0
         
         left = max(x_center - patch_size // 2, 0)
-        right = min(x_center + patch_size // 2, self._image_size[0])
+        right = min(left + patch_size, self._image_size[0])
         top = max(y_center - patch_size // 2, 0)
-        bot = min(y_center + patch_size // 2, self._image_size[1])
+        bot = min(top + patch_size, self._image_size[1])
         
         l = left - (x_center - patch_size // 2)
         r = l + right - left
         t = top - (y_center - patch_size // 2)
         b = t + bot - top
-        if (right - left) != (r-l):
-            a = 1
         return (img, (left, top, right, bot), (l, t, r, b))
         

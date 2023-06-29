@@ -42,9 +42,9 @@ parser.add_argument('--roi_generator', default='sampling_l8', metavar='ROI_GENER
                     type=str, help='type of the generator of the first stage')
 parser.add_argument('--roi_threshold', default=0.1, metavar='ROI_GENERATOR',
                     type=float, help='threshold of the generator of the first stage')
-parser.add_argument('--itc_threshold', default=100, metavar='ITC_THRESHOLD',
+parser.add_argument('--itc_threshold', default=[100,500], metavar='ITC_THRESHOLD',
                     type=float, help='threshold of the long axis of isolated tumor')
-parser.add_argument('--GPU', default='1', type=str, help='which GPU to use'
+parser.add_argument('--GPU', default='0', type=str, help='which GPU to use'
                     ', default 0')
 parser.add_argument('--num_workers', default=0, type=int, help='number of '
                     'workers to use to make batch, default 5')
@@ -72,14 +72,15 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
     else:
         probs_map = np.zeros(shape)
         counter = np.zeros(shape)
-    
+
     num_batch = len(dataloader)
 
     count = 0
     time_now = time.time()
     time_total = 0.
+    
     with torch.no_grad():
-        for (data, rect, shape) in dataloader:
+        for (data, rect, size) in dataloader:
             data = Variable(data.cuda(non_blocking=True))
             output = model(data)
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
@@ -112,7 +113,7 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
 def make_dataloader(args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE'):
     batch_size = cnn['batch_inf_size']
     num_workers = args.num_workers
-    
+
     dataloader = DataLoader(
         WSIPatchDataset(slide, prior, level_sample, level_ckpt, args, file,
                         image_size=cnn['patch_inf_size'],
@@ -131,7 +132,7 @@ def run(args):
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
     logging.basicConfig(level=logging.INFO)
-        
+
     with open(args.cnn_path) as f:
         cnn = json.load(f)
     ckpt = torch.load(os.path.join(args.ckpt_path, 'best.ckpt'))
@@ -141,9 +142,9 @@ def run(args):
     
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
-    for file in sorted(dir)[94:]:
+    for file in sorted(dir)[84:]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-        #                     'save_random_l{}'.format(level_save), file)):
+        #                             'save_roitt_0.1_min_100_edge_1_dyn2_512_size_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         
@@ -155,18 +156,22 @@ def run(args):
         # Computes the inference mask
         filled_image = nd.morphology.binary_fill_holes(POI)
         evaluation_mask = measure.label(filled_image, connectivity=2)
-        # eliminate ITC
+        # eliminate large TC
         max_label = np.amax(evaluation_mask)
         properties = measure.regionprops(evaluation_mask)
-        filled_mask = np.zeros(first_stage_map.shape) > 0
-        threshold = args.itc_threshold / (0.243 * pow(2, level_sample))
+        filled_mask = np.zeros(filled_image.shape) > 0
+        feature_map = np.zeros(filled_image.shape).astype(np.uint8)
+        threshold = tuple([t / (0.243 * pow(2, level_sample)) for t in args.itc_threshold])
         for i in range(0, max_label):
-            if properties[i].major_axis_length > threshold:
+            if properties[i].major_axis_length > threshold[0] and properties[i].major_axis_length < threshold[1]:
                 l, t, r, b = properties[i].bbox
                 filled_mask[l: r, t: b] = np.logical_or(filled_mask[l: r, t: b], properties[i].image_filled)
+                region_confidence = first_stage_map[properties[i].coords[:,0], properties[i].coords[:,1]].mean()
+                feature_map[properties[i].coords[:,0], properties[i].coords[:,1]] = region_confidence
+        
         # generate distance map
         distance, coord = nd.distance_transform_edt(filled_mask, return_indices=True)
-        prior = (first_stage_map, distance, coord)
+        prior = (first_stage_map, distance, coord, feature_map)
 
         # calculate heatmap & runtime
         dataloader = make_dataloader(
@@ -179,7 +184,7 @@ def run(args):
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
         np.save(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                    'save_roitt_0.1_min_100_edge_1_dyn2_256_size_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+                                    'save_roi_th_0.1_min_100_max_500_fix_size_512_non_holes_l{}'.format(level_save), file), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -190,7 +195,7 @@ def run(args):
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                    'save_roitt_0.1_min_100_edge_1_dyn2_256_size_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+                                    'save_roi_th_0.1_min_100_max_500_fix_size_512_non_holes_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -204,7 +209,7 @@ def main():
         './datasets/test/dens_map_sampling_2s_l6'])
     args.roi_generator = 'distance'
     args.roi_threshold = 0.1
-    args.GPU = "1"
+    args.GPU = "0"
     
     run(args)
 

@@ -356,7 +356,7 @@ def NMM(boxes, iouthreshold):
     idxs = list(reversed(range(len(area))))  # np.argsort(y2)
     # keep looping while some indexes still remain in the indexes
     # list
-    cluster_boxes = []
+    nmm_boxes = []
     while len(idxs) > 0:
         # grab the last index in the indexes list and add the
         # index value to the list of picked indexes
@@ -388,16 +388,16 @@ def NMM(boxes, iouthreshold):
         xx2 = np.amax(x2[idxs[delete_idxs]])
         yy2 = np.amax(y2[idxs[delete_idxs]])
 
-        cluster_dict = {'cluster_box':[int(xx1), int(yy1), int(xx2-xx1), int(yy2-yy1)]}
+        cluster_dict = {'cluster':[int(xx1), int(yy1), int(xx2-xx1), int(yy2-yy1)]}
         child_list = []
         for box_idx in delete_idxs:
             child_box_x1 = x1[idxs[box_idx]]
             child_box_y1 = y1[idxs[box_idx]]
             child_box_w = x2[idxs[box_idx]] - x1[idxs[box_idx]]
             child_box_h = y2[idxs[box_idx]] - y1[idxs[box_idx]]
-            child_list.append({'cluster_box': [int(child_box_x1), int(child_box_y1), int(child_box_w), int(child_box_h)]})
+            child_list.append({'cluster': [int(child_box_x1), int(child_box_y1), int(child_box_w), int(child_box_h)]})
         cluster_dict.update({'child': child_list})
-        cluster_boxes.append(cluster_dict)
+        nmm_boxes.append(cluster_dict)
 
         boxes[i,:4]=np.array([xx1,yy1,xx2,yy2])
         # delete all indexes from the index list that have
@@ -406,9 +406,9 @@ def NMM(boxes, iouthreshold):
     # return only the bounding boxes that were picked using the
     # integer data type
 
-    return boxes[pick].astype("int"), cluster_boxes
+    return boxes[pick].astype("int"), nmm_boxes
 
-def NMS(boxes, iouthreshold):
+def NMS(boxes, iouthreshold, score_refine=False):
     """
     """
     # if there are no boxes, return an empty list
@@ -431,6 +431,7 @@ def NMS(boxes, iouthreshold):
     y1 = boxes[:, 1]
     x2 = boxes[:, 2]
     y2 = boxes[:, 3]
+    scr = boxes[:, 4]
 
     # compute the area of the bounding boxes and sort the bounding
     # boxes by the bottom-right y-coordinate of the bounding box
@@ -438,7 +439,8 @@ def NMS(boxes, iouthreshold):
     idxs = list(reversed(range(len(area))))  # np.argsort(y2)
     # keep looping while some indexes still remain in the indexes
     # list
-    cluster_boxes = []
+    nms_boxes = []
+    count = 0
     while len(idxs) > 0:
         # grab the last index in the indexes list and add the
         # index value to the list of picked indexes
@@ -459,33 +461,48 @@ def NMS(boxes, iouthreshold):
         h = np.maximum(0, yy2 - yy1)
 
         # compute the ratio of overlap
-        overlap = (w * h) / area[idxs[:last]]
-
+        overlap = (w * h) / area[i]
+        # overlap = (w * h) / (area[i] + area[idxs[:last]] - w * h)
         # merge all boxes with overlap larger than threshold
         delete_idxs = np.concatenate(([last],
                                        np.where(overlap > iouthreshold)[0]))
+        supp_idxs = np.where(overlap > iouthreshold)[0]
         idxs=np.array(idxs)
-        xx1 = np.amin(x1[idxs[delete_idxs]])
-        yy1 = np.amin(y1[idxs[delete_idxs]])
-        xx2 = np.amax(x2[idxs[delete_idxs]])
-        yy2 = np.amax(y2[idxs[delete_idxs]])
-
-        cluster_dict = {'cluster_box':[int(xx1), int(yy1), int(xx2-xx1), int(yy2-yy1)]}
-        child_list = []
-        for box_idx in delete_idxs:
-            child_box_x1 = x1[idxs[box_idx]]
-            child_box_y1 = y1[idxs[box_idx]]
-            child_box_w = x2[idxs[box_idx]] - x1[idxs[box_idx]]
-            child_box_h = y2[idxs[box_idx]] - y1[idxs[box_idx]]
-            child_list.append({'cluster_box': [int(child_box_x1), int(child_box_y1), int(child_box_w), int(child_box_h)]})
-        cluster_dict.update({'child': child_list})
-        cluster_boxes.append(cluster_dict)
+        if score_refine:
+            keep_dict = {'keep':[int(x1[i]), int(y1[i]), int(x2[i]-x1[i]), int(y2[i]-y1[i]), 255.0+len(boxes)-count, scr[i]]}
+        else:
+            keep_dict = {'keep':[int(x1[i]), int(y1[i]), int(x2[i]-x1[i]), int(y2[i]-y1[i]), scr[i]]}
+        supp_list = []
+        rege_list = []
+        for box_idx in supp_idxs:
+            supp_box_x1 = x1[idxs[box_idx]]
+            supp_box_y1 = y1[idxs[box_idx]]
+            supp_box_w = x2[idxs[box_idx]] - x1[idxs[box_idx]]
+            supp_box_h = y2[idxs[box_idx]] - y1[idxs[box_idx]]
+            supp_list.append([int(supp_box_x1), int(supp_box_y1), int(supp_box_w), int(supp_box_h), scr[idxs[box_idx]]])
+            
+            while (w[box_idx] * h[box_idx]) / area[i] > iouthreshold:
+                x1[idxs[box_idx]] += 16
+                x2[idxs[box_idx]] -= 16
+                y1[idxs[box_idx]] += 16
+                y2[idxs[box_idx]] -= 16
+                w[box_idx] = np.maximum(0, np.minimum(x2[i], x2[idxs[box_idx]]) - np.maximum(x1[i], x1[idxs[box_idx]]))
+                h[box_idx] = np.maximum(0, np.minimum(y2[i], y2[idxs[box_idx]]) - np.maximum(y1[i], y1[idxs[box_idx]]))
+                
+            rege_box_x1 = x1[idxs[box_idx]]
+            rege_box_y1 = y1[idxs[box_idx]]
+            rege_box_w = x2[idxs[box_idx]] - x1[idxs[box_idx]]
+            rege_box_h = y2[idxs[box_idx]] - y1[idxs[box_idx]]
+            rege_list.append([int(rege_box_x1), int(rege_box_y1), int(rege_box_w), int(rege_box_h), scr[idxs[box_idx]]])
+            
+        keep_dict.update({'supp': supp_list, 'rege': rege_list})
+        nms_boxes.append(keep_dict)
 
         # boxes[i,:4]=np.array([xx1,yy1,xx2,yy2])
         # delete all indexes from the index list that have
         idxs=np.delete(idxs,delete_idxs)
-
+        count += 1
     # return only the bounding boxes that were picked using the
     # integer data type
 
-    return boxes[pick].astype("int"), cluster_boxes
+    return boxes[pick].astype("int"), nms_boxes

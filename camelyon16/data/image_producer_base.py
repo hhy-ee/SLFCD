@@ -9,52 +9,51 @@ from PIL import Image
 np.random.seed(0)
 
 from torchvision import transforms  # noqa
-
+sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 
 class ImageDataset(Dataset):
 
-    def __init__(self, data_path, img_size,
-                 crop_size=224, normalize=True):
+    def __init__(self, data_path, normalize=True):
         self._data_path = data_path
-        self._img_size = img_size
-        self._crop_size = crop_size
         self._normalize = normalize
         self._color_jitter = transforms.ColorJitter(64.0/255, 0.75, 0.25, 0.04)
         self._pre_process()
 
     def _pre_process(self):
         # find classes
-        if sys.version_info >= (3, 5):
-            # Faster and available in python 3.5 and above
-            classes = [d.name for d in os.scandir(self._data_path) if d.is_dir()]
-        else:
-            classes = [d for d in os.listdir(self._data_path) if os.path.isdir(os.path.join(self._data_path, d))]
-        classes.sort()
-
+        # Faster and available in python 3.5 and above
+        classes = [d.name for d in os.scandir(self._data_path) if d.is_dir()]
         # make dataset
-        self._items = []
+        self.total_items = []
         for target in sorted(classes):
             d = os.path.join(self._data_path, target)
             if not os.path.isdir(d):
                 continue
-
             for root, _, fnames in sorted(os.walk(d)):
                 for fname in sorted(fnames):
                     if 'img' in fname:
                         img_path = os.path.join(root, fname)
                         label_path = os.path.join(root, fname.split('_')[0] + '_label.png')
                         item = (img_path, label_path)
-                        self._items.append(item)
-
-        random.shuffle(self._items)
-
-        self._num_images = len(self._items)
+                        self.total_items.append(item)
+        
+        random.shuffle(self.total_items)
+        self._num_images = len(self.total_items)
 
     def __len__(self):
-        return self._num_images
+        return len(self.local_items)
 
+    def data_split(self, mode):
+        if mode == 'train':
+            self.local_items = self.total_items[self._num_images // 10:]
+        elif mode == 'valid':
+            self.local_items = self.total_items[:self._num_images // 10]
+            
+    def data_shuffle(self):
+        random.shuffle(self.local_items)
+        
     def __getitem__(self, idx):
-        img_path, label_path = self._items[idx]
+        img_path, label_path = self.local_items[idx]
 
         label = Image.open(label_path)
 

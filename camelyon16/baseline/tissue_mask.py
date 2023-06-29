@@ -54,17 +54,9 @@ def run(args):
         np.save(os.path.join(args.tissue_path, file.split('.')[0] + '.npy'), tissue_mask)
 
 def main():
-    # args = parser.parse_args([
-    #     "/media/ps/passport2/hhy/camelyon16/train/tumor",
-    #     "/media/ps/passport2/hhy/camelyon16/train/tissue_mask_l0"])
-    
-    # args = parser.parse_args([
-    #     "/media/ps/passport2/hhy/camelyon16/test/images",
-    #     "/media/ps/passport2/hhy/camelyon16/test/tissue_mask_l5"])
-    
     args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/train/tumor",
-        "/media/ps/passport2/hhy/camelyon16/train/tissue_mask_l5"])
+        "./datasets/train/normal",
+        "./datasets/train/tissue_mask_l6"])
     
     run(args)
 

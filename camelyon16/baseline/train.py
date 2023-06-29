@@ -33,8 +33,8 @@ parser.add_argument('--num_workers', default=0, type=int, help='number of'
 parser.add_argument('--device_ids', default='0', type=str, help='comma'
                     ' separated indices of GPU to use, e.g. 0,1 for using GPU_0'
                     ' and GPU_1, default 0.')
-parser.add_argument('--resume', default=False, type=bool, help='comma'
-                    ' whether to resume the pretrained weight')
+parser.add_argument('--init_mode', default='finetune', type=str, help='comma'
+                    ' how to initial the pretrained weight')
 
 def chose_model(cnn):
     if cnn['model'] == 'segmentation':
@@ -44,13 +44,13 @@ def chose_model(cnn):
     return model
 
 
-def train_epoch(summary, summary_writer, cnn, model, loss_fn, optimizer,
-                dataloader_train):
+def train_epoch(summary, summary_writer, cnn, model, loss_fn, optimizer, dataloader):
+    
     model.train()
-
-    steps = len(dataloader_train)
-    batch_size = dataloader_train.batch_size
-    dataiter_train = iter(dataloader_train)
+    dataloader.dataset.data_split('train')
+    dataloader.dataset.data_shuffle()
+    steps = len(dataloader)
+    dataiter_train = iter(dataloader)
 
     time_now = time.time()
     for step in range(steps):
@@ -93,13 +93,13 @@ def train_epoch(summary, summary_writer, cnn, model, loss_fn, optimizer,
     return summary
 
 
-def valid_epoch(summary, model, loss_fn,
-                dataloader_valid):
+def valid_epoch(summary, model, loss_fn, dataloader):
+    
     model.eval()
-
-    steps = len(dataloader_valid) // 10
-    batch_size = dataloader_valid.batch_size
-    dataiter_valid = iter(dataloader_valid)
+    dataloader.dataset.data_split('valid')
+    dataloader.dataset.data_shuffle()
+    steps = len(dataloader)
+    dataiter_valid = iter(dataloader)
 
     loss_sum = 0
     acc_sum = 0
@@ -147,14 +147,18 @@ def run(args):
 
     model = chose_model(cnn)
     # fc_features = model.fc.in_features
-    # model.fc = nn.Linear(fc_features, 1) # 须知
+    # model.fc = nn.Linear(fc_features, 1)
 
     summary_train = {'epoch': 0, 'step': 0}
-    if args.resume:
+    summary_valid = {'loss': float('inf'), 'acc': 0}
+    if args.init_mode == 'resume':
         checkpoint = torch.load(os.path.join(args.save_path, 'best.ckpt'))
         summary_train = {'epoch': checkpoint['epoch'], 'step': checkpoint['step']}
         model.load_state_dict(checkpoint['state_dict'])
-    summary_valid = {'loss': float('inf'), 'acc': 0}
+    if args.init_mode == 'finetune':
+        checkpoint = torch.load('./save_train/train_base_l1/best.ckpt')
+        model.load_state_dict(checkpoint['state_dict'])
+
 
     model = DataParallel(model, device_ids=None)
     model = model.cuda()
@@ -162,44 +166,23 @@ def run(args):
     loss_fn = BCEWithLogitsLoss().cuda()
     optimizer = SGD(model.parameters(), lr=cnn['lr'], momentum=cnn['momentum'])
 
-    # dataset_train = ImageFolder(cnn['data_path_train'])
-    # dataset_valid = ImageFolder(cnn['data_path_valid'])
-    dataset_train = ImageDataset(cnn['data_path_train'],
-                                 cnn['image_size'],
-                                 cnn['crop_size'],
-                                 cnn['normalize'])
-    dataset_valid = ImageDataset(cnn['data_path_valid'],
-                                 cnn['image_size'],
-                                 cnn['crop_size'],
-                                 cnn['normalize'])
+    dataset = ImageDataset(cnn['data_path_train'], cnn['normalize'])
 
-    dataloader_train = DataLoader(dataset_train,
-                                  batch_size=batch_size_train,
-                                  num_workers=num_workers)
-    dataloader_valid = DataLoader(dataset_valid,
-                                  batch_size=batch_size_valid,
-                                  num_workers=num_workers)
+    dataloader= DataLoader(dataset, batch_size=batch_size_train, num_workers=num_workers)
 
     summary_writer = SummaryWriter(args.save_path)
     loss_valid_best = float('inf')
-    for epoch in range(cnn['epoch'] - summary_train['epoch']):
-        summary_train = train_epoch(summary_train, summary_writer, cnn, model,
-                                    loss_fn, optimizer,
-                                    dataloader_train)
-        # if (epoch + summary_train['epoch']) >= 20 and (epoch + summary_train['epoch']) % 5 ==0:
-        # if (epoch + summary_train['epoch']) >= 0 and (epoch + summary_train['epoch']) % 2 ==0:
-        #     torch.save({'epoch': summary_train['epoch'],
-        #                 'step': summary_train['step'],
-        #                 'state_dict': model.module.state_dict()},
-        #             os.path.join(args.save_path, 'train_e{}.ckpt'.format(epoch)))
-        torch.save({'epoch': summary_train['epoch'],
+    for epoch in range(summary_train['epoch'], cnn['epoch']):
+        summary_train = train_epoch(summary_train, summary_writer, cnn, 
+                                    model, loss_fn, optimizer, dataloader)
+        if epoch >= 0 and epoch % 2 ==0:
+            torch.save({'epoch': summary_train['epoch'],
                         'step': summary_train['step'],
                         'state_dict': model.module.state_dict()},
-                    os.path.join(args.save_path, 'train_e{}.ckpt'.format(summary_train['epoch'])))
+                        os.path.join(args.save_path, 'train_e{}.ckpt'.format(epoch)))
 
         time_now = time.time()
-        summary_valid = valid_epoch(summary_valid, model, loss_fn,
-                                    dataloader_valid)
+        summary_valid = valid_epoch(summary_valid, model, loss_fn, dataloader)
         time_spent = time.time() - time_now
 
         logging.info('{}, Epoch: {}, step: {}, Validation Loss: {:.5f}, '
@@ -228,10 +211,10 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     args = parser.parse_args([
-        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l0.json",
-        "/home/ps/hhy/slfcd/save_train/train_base_l0"])
+        "./camelyon16/configs/cnn_dyn_l1.json",
+        "./save_train/train_dyn_l1"])
     args.device_ids = '0'
-    args.resume = True
+    args.init_mode = 'finetune'
     run(args)
 
 

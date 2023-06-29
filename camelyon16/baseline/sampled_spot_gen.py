@@ -42,16 +42,15 @@ class patch_point_in_mask_gen(object):
     def get_patch_point(self):
         # find tumor point
         mask_level = int(os.path.dirname(self.tumor_path).split('l')[-1])
-        tissue_shape = tuple([int(i / 2**(mask_level-self.level)) for i in self.slide.level_dimensions[self.level]])
+        tissue_shape = tuple([int(i / 2**mask_level) for i in self.slide.level_dimensions[0]])
         if 'tumor' in os.path.basename(self.tumor_path):
-            mask_tumor = Image.fromarray(np.load(self.tumor_path).transpose())
-            mask_tumor = np.asarray(mask_tumor.resize(tissue_shape)).transpose()
+            mask_tumor = np.load(self.tumor_path)
         else:
             mask_tumor = np.zeros(tissue_shape) > 127
         X_idcs1, Y_idcs1 = np.where(mask_tumor)
         # find normal point
-        mask_tissue = Image.fromarray(np.load(self.tissue_path).transpose()).resize(tissue_shape)
-        mask_normal = np.asarray(mask_tissue).transpose() & (~ mask_tumor)
+        mask_tissue = np.load(self.tissue_path)
+        mask_normal = mask_tissue & (~ mask_tumor)
         X_idcs2, Y_idcs2 = np.where(mask_normal)
 
         centre_points_tumor = np.stack(np.vstack((X_idcs1.T, Y_idcs1.T)), axis=1)
@@ -71,6 +70,8 @@ class patch_point_in_mask_gen(object):
 def run(args):
     dir = os.listdir(args.tissue_path)
     for file in tqdm(sorted(dir), total=len(dir)):
+        if file != 'tumor_082.npy':
+            continue
         tumor_path = os.path.join(args.tumor_path, file.split('.')[0] + '.npy')
         tissue_path = os.path.join(args.tissue_path, file.split('.')[0] + '.npy')
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('_')[0], file.split('.')[0]+'.tif'))
@@ -90,10 +91,10 @@ def run(args):
 def main():
     logging.basicConfig(level=logging.INFO)
     args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/train/",
-        "/media/ps/passport2/hhy/camelyon16/train/tumor_mask_l5",
-        "/media/ps/passport2/hhy/camelyon16/train/tissue_mask_l5",
-        "/media/ps/passport2/hhy/camelyon16/train/sample_gen_l0",
+        "./datasets/train/",
+        "./datasets/train/tumor_mask_l6",
+        "./datasets/train/tissue_mask_l6",
+        "./datasets/train/sample_gen_l1",
         '1000'])
     run(args)
 
