@@ -278,8 +278,8 @@ if __name__ == "__main__":
             # feature 1
             total_area, num_object = 0, 0
             for obj in dens_patch:
-                total_area += int((obj > args.dens_thres).sum())
-                if (obj > args.dens_thres).sum() > 0:
+                total_area += int((obj > 0.5).sum())
+                if (obj > 0.5).sum() > 0:
                     num_object += 1
             if num_object != 0:
                 avg_area = total_area / num_object
@@ -306,7 +306,7 @@ if __name__ == "__main__":
                                     '{}_clu_{}.npy'.format(os.path.basename(file).split('.')[0], i)), dens_patch)
                 
             for j, child in enumerate(cluster['child']):
-                chi_box = child['cluster_box']
+                chi_box = child['cluster']
                 dens_patch = feature_map[chi_box[0]: chi_box[0]+chi_box[2], chi_box[1]: chi_box[1]+chi_box[3]]
                 slide_patch = slide.read_region((int(chi_box[0]* slide.level_downsamples[level_output]), \
                                             int(chi_box[1]* slide.level_downsamples[level_output])), \
@@ -314,8 +314,8 @@ if __name__ == "__main__":
                 # feature 1
                 total_area, num_object = 0, 0
                 for obj in dens_patch:
-                    total_area += int((obj > args.dens_thres).sum())
-                    if (obj > args.dens_thres).sum() > 0:
+                    total_area += int((obj > 0.5).sum())
+                    if (obj > 0.5).sum() > 0:
                         num_object += 1
                 if num_object != 0:
                     avg_area = total_area / num_object
