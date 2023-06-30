@@ -12,7 +12,6 @@ from PIL import Image
 from PIL import ImageDraw
 from scipy import ndimage as nd
 from skimage import measure
-from skimage.morphology import convex_hull_image
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 from camelyon16.cluster.utils import NMS, NMM
@@ -44,10 +43,7 @@ def parse_args():
     parser.add_argument('wsi_path', default=".", help='the path for source tif data')
     parser.add_argument('prior_path', default=".", help='the path for density map data')
     parser.add_argument('output_path', default=".", help='the path for save data')
-    parser.add_argument('--roi_generator', default='base_l8', metavar='ROI_GENERATOR',
-                    type=str, help='type of the generator of the first stage')
-    parser.add_argument('--roi_threshold', default=0.1, metavar='ROI_GENERATOR',
-                    type=float, help='type of the generator of the first stage')
+    parser.add_argument('--roi_threshold', help='type of the generator of the first stage')
     parser.add_argument('--itc_threshold', help='The threshold of ITC to be eliminated')
     parser.add_argument('--ini_patchsize', help='The size of initial patch size')
     parser.add_argument('--nmm_threshold', help='The threshold to select the cropped region')
@@ -55,29 +51,29 @@ def parse_args():
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/test/images', 
-                              './datasets/test/dens_map_sampling_l8',
-                              './datasets/test/crop_split_l1'])
-    args.roi_generator = 'sampling_l8'
+    args = parser.parse_args(['./datasets/train/tumor', 
+                              './datasets/train/dens_map_sampling_l8',
+                              './datasets/train/crop_split_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = [100, 500]    # ITC_threshold / (0.243 * pow(2, level))
-    args.ini_patchsize = 8
+    args.itc_threshold = [100, 2000]    # ITC_threshold / (0.243 * pow(2, level))
+    args.ini_patchsize = 256
     args.nms_threshold = 0.5
     args.nmm_threshold = 0.1
     args.fea_threshold = 0.5
-    args.image_show = False
+    args.image_show = True
     args.label_save = False
     return args
 
 if __name__ == "__main__":
 
     args = parse_args()
-    save_dict = {}
-    nms_dict = {}
+    final_boxes_dict = {}
+    dyn_boxes_dict = {}
     time_total = 0.0
     
     level_show = 6
     level_prior = 6
+    level_input = 3
     level_output = int(args.output_path.split('l')[-1])
 
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_prior)))
@@ -88,10 +84,12 @@ if __name__ == "__main__":
 
         # calculate score of each patches
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
-        first_stage_map = np.load(os.path.join(os.path.dirname(args.prior_path), \
-                                    'dens_map_{}'.format(args.roi_generator), 'model_l1/save_l3', file))
+        first_stage_map = np.load(os.path.join(args.prior_path, 'model_l1/save_l3', file))
         prior_shape = tuple([int(i / 2**level_prior) for i in slide.level_dimensions[0]])
         prior_map = cv2.resize(first_stage_map, (prior_shape[1], prior_shape[0]), interpolation=cv2.INTER_CUBIC)
+        if 'train' in args.wsi_path:
+            gt_tumor_mask = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tumor_mask_l{}'.format(level_prior), file))
+            prior_map = prior_map * gt_tumor_mask
         POI = (prior_map / 255) > args.roi_threshold
         
         # Computes the inference mask
@@ -102,16 +100,14 @@ if __name__ == "__main__":
         max_label = np.amax(evaluation_mask)
         properties = measure.regionprops(evaluation_mask)
         filled_mask = np.zeros(filled_image.shape) > 0
-        feature_map = np.zeros(filled_image.shape).astype(np.uint8)
+        conf_map = np.zeros(filled_image.shape).astype(np.uint8)
         threshold = tuple([t / (0.243 * pow(2, level_prior)) for t in args.itc_threshold])
-        count = 0
         for i in range(0, max_label):
             if properties[i].major_axis_length > threshold[0] and properties[i].major_axis_length < threshold[1]:
                 l, t, r, b = properties[i].bbox
                 filled_mask[l: r, t: b] = np.logical_or(filled_mask[l: r, t: b], properties[i].image_filled)
                 region_confidence = prior_map[properties[i].coords[:,0], properties[i].coords[:,1]].mean()
-                feature_map[properties[i].coords[:,0], properties[i].coords[:,1]] = region_confidence
-                count += 1
+                conf_map[properties[i].coords[:,0], properties[i].coords[:,1]] = region_confidence
         # distance map
         distance, coord = nd.distance_transform_edt(filled_mask, return_indices=True)
         edge_X, edge_Y = np.where(distance == 1)
@@ -131,7 +127,7 @@ if __name__ == "__main__":
             heat_img_rect = np.asarray(img)
             cv2.imwrite(os.path.join(args.output_path, file.split('.')[0] + '_ctc.png'), heat_img_rect)
             
-            prior_heat = cv2.imread(os.path.join(args.prior_path, 'model_l1/save_l3', file.split('.')[0]+'_heat.png'))
+            prior_heat = cv2.imread(os.path.join(args.prior_path, 'model_l1/save_l3', file.replace('.npy','_heat.png')))
             prior_heat[edge_Y, edge_X, :] = [0, 255, 0]
             cv2.imwrite(os.path.join(args.output_path, file.split('.')[0] + '_edge.png'), prior_heat)
             
@@ -139,118 +135,80 @@ if __name__ == "__main__":
             img_rgb = slide.read_region((0, 0), level_show, \
                                 tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
             img_rgb = np.asarray(img_rgb).transpose((1,0,2))
-            feature_map_res = cv2.resize(feature_map, (img_rgb.shape[1], img_rgb.shape[0]), interpolation=cv2.INTER_CUBIC)
-            feature_map_rgb = cv2.applyColorMap(feature_map_res, cv2.COLORMAP_JET)
-            feature_map_rgb = cv2.cvtColor(feature_map_rgb, cv2.COLOR_BGR2RGB)
-            heat_img = cv2.addWeighted(feature_map_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
-            cv2.imwrite(os.path.join(args.output_path, file.split('.')[0] + '_feature.png'), heat_img)
-        
-        # boxes = []
-        # scale_save = 2 ** (level_prior - level_output)
-        # for idx in range(0, len(edge_X)):
-        #     x_center, y_center = edge_X[idx], edge_Y[idx]
-        #     patch_size = np.random.randint(2,9) * 32 // scale_save
-        #     l, t = x_center - patch_size // 2, y_center - patch_size // 2
-        #     r, b = x_center + patch_size // 2, y_center + patch_size // 2
-        #     pos_idx = np.where(filled_mask[l: r, t: b])
-        #     scr = prior_map[l: r, t: b][pos_idx].mean()
-        #     boxes.append([l, t, r, b, patch_size, scr])
-        # boxes_dyn = [[int(i[0] * scale_save), int(i[1] * scale_save), \
-        #                 int(i[2]* scale_save), int(i[3]* scale_save), i[5]] for i in boxes]
-        
-        # boxes = []
-        # edge_map = (distance == 1)
-        # for idx in range(0, len(edge_X)):
-        #     x_center, y_center = edge_X[idx], edge_Y[idx]
-        #     ini_size = args.ini_patchsize
-        #     l, t = x_center - ini_size // 2, y_center - ini_size // 2
-        #     while edge_map[l: l+ini_size, t: t+ini_size].sum() > 8:
-        #         ini_size = ini_size - 1
-        #         l, t = x_center - ini_size // 2, y_center - ini_size // 2
-        #     scr = prior_map[x_center, y_center]
-        #     boxes.append([l, t, ini_size, scr, x_center, y_center])
+            conf_map_res = cv2.resize(conf_map, (img_rgb.shape[1], img_rgb.shape[0]), interpolation=cv2.INTER_CUBIC)
+            conf_map_rgb = cv2.applyColorMap(conf_map_res, cv2.COLORMAP_JET)
+            conf_map_rgb = cv2.cvtColor(conf_map_rgb, cv2.COLOR_BGR2RGB)
+            heat_img = cv2.addWeighted(conf_map_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
+            cv2.imwrite(os.path.join(args.output_path, file.split('.')[0] + '_conf.png'), heat_img)
 
-        # boxes = []
-        # patches_size = []
-        # scale_save = 2 ** (level_prior - level_output)
-        # for idx in range(0, len(edge_X)):
-        #     x_center, y_center = edge_X[idx], edge_Y[idx]
-        #     patch_size = 9 - feature_map[x_center, y_center] // 32
-        #     l, t = x_center - patch_size // 2, y_center - patch_size // 2
-        #     r, b = l + patch_size, t + patch_size
-        #     pos_idx = np.where(filled_mask[l: r, t: b])
-        #     scr = prior_map[l: r, t: b][pos_idx].mean()
-        #     boxes.append([l, t, r, b, patch_size, scr])
-        #     patches_size.append(patch_size)
-        # boxes_dyn = [[int(i[0] * scale_save), int(i[1] * scale_save), \
-        #                 int(i[2]* scale_save), int(i[3]* scale_save), i[5]] for i in boxes]
-        
-        boxes_dyn = []
-        scale_save = 2 ** (level_prior - level_output)
+        if len(edge_X) == 0:
+            dyn_boxes_dict.update({file.split('.npy')[0]: []})
+            continue
+
+        # generate boxes along edge
+        boxes_edge = []
+        scale_in = 2 ** (level_prior - level_input)
+        scale_out = 2 ** (level_input - level_output)
         for idx in range(0, len(edge_X)):
             x_center, y_center = edge_X[idx], edge_Y[idx]
-            patch_size = args.ini_patchsize
-            l, t = x_center - patch_size // 2, y_center - patch_size // 2
+            patch_size = args.ini_patchsize // scale_out
+            l = x_center * scale_in - patch_size // 2
+            t = y_center * scale_in - patch_size // 2
             r, b = l + patch_size, t + patch_size
-            pos_idx = np.where(filled_mask[l: r, t: b])
-            scr = prior_map[l: r, t: b][pos_idx].mean()
-            l = int(x_center * scale_save - patch_size * scale_save // 2)
-            t = int(y_center * scale_save - patch_size * scale_save // 2)
-            boxes_dyn.append([l, t, l + patch_size * scale_save, t + patch_size * scale_save, scr])
+            pos_idx = np.where(first_stage_map[l: r, t: b] / 255 > 0.1)
+            scr = first_stage_map[l: r, t: b][pos_idx].mean()
+            l, t, r, b = l * scale_out, t * scale_out, r * scale_out, b  * scale_out
+            boxes_edge.append([l, t, r, b, scr])
         
-        # save
-        if len(boxes_dyn) == 0:
-            nms_dict.update({file.split('.npy')[0]: []})
-            continue
-        boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_dyn]
-        
+        # save 1
+        # boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_edge]
+        # dyn_boxes_dict.update({file.split('.npy')[0]: boxes_save})
+
         # NMS
-        boxes_dyn = np.array(boxes_dyn)
-        keep_boxes_list, nms_boxes_dict = NMS(boxes_dyn, args.nms_threshold)
+        boxes_edge = np.array(boxes_edge)
+        keep_boxes_list, nms_boxes_dict = NMS(boxes_edge, args.nms_threshold)
         boxes_nms = [list(i) for i in keep_boxes_list]
         if args.image_show:
             scale_show = 2 ** (level_output - level_show)
-            img = Image.open(os.path.join(args.prior_path, 'model_l1', 'save_l3', \
-                                            os.path.basename(file).replace('.npy','_heat.png')))
-            img_dyn_draw = ImageDraw.ImageDraw(img)
-            boxes_dyn_show = [[int(i[0] * scale_show), int(i[1] * scale_show), \
+            img = Image.open(os.path.join(args.prior_path, 'model_l1/save_l3', file.replace('.npy','_heat.png')))
+            img_nms_draw = ImageDraw.ImageDraw(img)
+            boxes_nms_show = [[int(i[0] * scale_show), int(i[1] * scale_show), \
                             int(i[2] * scale_show), int(i[3] * scale_show)] for i in boxes_nms]
-            for info in boxes_dyn_show:
-                img_dyn_draw.rectangle(((info[0], info[1]), (info[2], info[3])), fill=None, outline='blue', width=1)
+            for info in boxes_nms_show:
+                img_nms_draw.rectangle(((info[0], info[1]), (info[2], info[3])), fill=None, outline='blue', width=1)
             img.save(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_nms.png'))
         
         # dynamic patches
-        _, nms_boxes_dict = NMS(boxes_dyn, args.nms_threshold, score_refine=True)
+        _, nms_boxes_dict = NMS(boxes_edge, args.nms_threshold, score_refine=True)
         first_nms_boxes_dict = nms_boxes_dict
-        while len(nms_boxes_dict) != len(boxes_dyn):
-            boxes_save = []
+        while len(nms_boxes_dict) != len(boxes_edge):
+            boxes_dyn = []
             for i in nms_boxes_dict:
-                boxes_save += [i['keep']] + i['rege']
-            boxes_re_nms = np.array([[i[0], i[1], i[0] + i[2], i[1] + i[3], i[4]] for i in boxes_save])
+                boxes_dyn += [i['keep']] + i['rege']
+            boxes_re_nms = np.array([[i[0], i[1], i[0] + i[2], i[1] + i[3], i[4]] for i in boxes_dyn])
             _, nms_boxes_dict = NMS(boxes_re_nms, args.nms_threshold)
-        boxes_nms = [[i[0], i[1], i[0]+i[2], i[1]+i[3], i[4]] for i in boxes_save]
-        # boxes_nms = [i['keep'][:4] + [i['keep'][5]] for i in first_nms_boxes] + boxes_nms[len(first_nms_boxes):]
+        boxes_dyn = [[i[0], i[1], i[0]+i[2], i[1]+i[3], i[4]] for i in boxes_dyn]
+        # boxes_dyn = [i['keep'][:4] + [i['keep'][5]] for i in first_nms_boxes] + boxes_dyn[len(first_nms_boxes):]
         if args.image_show:
             scale_show = 2 ** (level_output - level_show)
-            img = Image.open(os.path.join(args.prior_path, 'model_l1', 'save_l3', \
-                                            os.path.basename(file).replace('.npy','_heat.png')))
+            img = Image.open(os.path.join(args.prior_path, 'model_l1/save_l3', file.replace('.npy','_heat.png')))
             img_dyn_draw = ImageDraw.ImageDraw(img)
             boxes_dyn_show = [[int(i[0] * scale_show), int(i[1] * scale_show), \
-                            int(i[2] * scale_show), int(i[3] * scale_show)] for i in boxes_nms]
+                            int(i[2] * scale_show), int(i[3] * scale_show)] for i in boxes_dyn]
             for info in boxes_dyn_show:
                 img_dyn_draw.rectangle(((info[0], info[1]), (info[2], info[3])), fill=None, outline='blue', width=1)
             img.save(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_dyn.png'))
-            
-        boxes_save = [{'keep': i[:4]} for i in boxes_save]
-        nms_dict.update({file.split('.npy')[0]: boxes_save})
+
+        # save 2
+        boxes_save = [{'keep': i[:4]} for i in boxes_dyn]
+        dyn_boxes_dict.update({file.split('.npy')[0]: boxes_save})
         
         # NMM
-        boxes_nms = np.array(boxes_nms)
-        cluster_boxes_list, nmm_boxes_dict = NMM(boxes_nms, args.nmm_threshold)
+        boxes_dyn = np.array(boxes_dyn)
+        cluster_boxes_list, nmm_boxes_dict = NMM(boxes_dyn, args.nmm_threshold)
         if args.image_show:
             scale_show = 2 ** (level_output - level_show)
-            img = Image.open(os.path.join(args.prior_path, 'model_l1', 'save_l3', \
-                                            os.path.basename(file).replace('.npy','_heat.png')))
+            img = Image.open(os.path.join(args.prior_path, 'model_l1/save_l3', file.replace('.npy','_heat.png')))
             img_draw = ImageDraw.ImageDraw(img)
             for cluster in nmm_boxes_dict:
                 for child in cluster['child']:
@@ -266,90 +224,90 @@ if __name__ == "__main__":
                                     fill=None, outline='green', width=1)
             img.save(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_nmm.png'))
         
-        # feature extraction
-        ext_shape = tuple([int(i / 2**level_output) for i in slide.level_dimensions[0]])
-        feature_map = cv2.resize(first_stage_map, (ext_shape[1], ext_shape[0]), interpolation=cv2.INTER_CUBIC)
-        wsi_slide = slide.read_region((0, 0), level_prior, prior_shape)
-        extractor = extractor_features(prior_map, wsi_slide)
-        wsi_features = compute_features(extractor, args.fea_threshold)
-        scale_feature = 2 ** (level_prior - level_output)
-        wsi_features['pixels_tumor'] = wsi_features['pixels_tumor'] * scale_feature,
-        wsi_features['intensity_tumor'] = wsi_features['intensity_tumor'] * scale_feature 
-        for i, cluster in enumerate(nmm_boxes_dict):
-            clu_box = cluster['cluster']
-            dens_patch = feature_map[clu_box[0]: clu_box[0]+clu_box[2], clu_box[1]: clu_box[1]+clu_box[3]]
-            slide_patch = slide.read_region((int(clu_box[0]* slide.level_downsamples[level_output]), \
-                                            int(clu_box[1]* slide.level_downsamples[level_output])), \
-                                            level_output, (clu_box[2], clu_box[3]))
-            # feature 1
-            # total_area, num_object = 0, 0
-            # for obj in dens_patch:
-            #     total_area += int((obj > 0.5).sum())
-            #     if (obj > 0.5).sum() > 0:
-            #         num_object += 1
-            # if num_object != 0:
-            #     avg_area = total_area / num_object
-            # else:
-            #     avg_area = total_area
-            # cluster.update({"total_area": total_area, "avg_area": avg_area, "num_object": num_object})
+        # # feature extraction
+        # ext_shape = tuple([int(i / 2**level_output) for i in slide.level_dimensions[0]])
+        # feature_map = cv2.resize(first_stage_map, (ext_shape[1], ext_shape[0]), interpolation=cv2.INTER_CUBIC)
+        # wsi_slide = slide.read_region((0, 0), level_prior, prior_shape)
+        # extractor = extractor_features(prior_map, wsi_slide)
+        # wsi_features = compute_features(extractor, args.fea_threshold)
+        # scale_feature = 2 ** (level_prior - level_output)
+        # wsi_features['pixels_tumor'] = wsi_features['pixels_tumor'] * scale_feature,
+        # wsi_features['intensity_tumor'] = wsi_features['intensity_tumor'] * scale_feature 
+        # for i, cluster in enumerate(nmm_boxes_dict):
+        #     clu_box = cluster['cluster']
+        #     dens_patch = feature_map[clu_box[0]: clu_box[0]+clu_box[2], clu_box[1]: clu_box[1]+clu_box[3]]
+        #     slide_patch = slide.read_region((int(clu_box[0]* slide.level_downsamples[level_output]), \
+        #                                     int(clu_box[1]* slide.level_downsamples[level_output])), \
+        #                                     level_output, (clu_box[2], clu_box[3]))
+        #     # feature 1
+        #     # total_area, num_object = 0, 0
+        #     # for obj in dens_patch:
+        #     #     total_area += int((obj > 0.5).sum())
+        #     #     if (obj > 0.5).sum() > 0:
+        #     #         num_object += 1
+        #     # if num_object != 0:
+        #     #     avg_area = total_area / num_object
+        #     # else:
+        #     #     avg_area = total_area
+        #     # cluster.update({"total_area": total_area, "avg_area": avg_area, "num_object": num_object})
             
-            # # feature 2
-            extractor = extractor_features(dens_patch, slide_patch)
-            features = compute_features(extractor, args.fea_threshold)
-            cluster.update(features)
+        #     # # feature 2
+        #     extractor = extractor_features(dens_patch, slide_patch)
+        #     features = compute_features(extractor, args.fea_threshold)
+        #     cluster.update(features)
             
-            # plot & save
-            if args.image_show:
-                img_patch_rgb = np.asarray(slide_patch.convert('RGB')).transpose((1,0,2))
-                label_patch_rgb = cv2.applyColorMap(dens_patch, cv2.COLORMAP_JET)
-                label_patch_rgb = cv2.cvtColor(label_patch_rgb, cv2.COLOR_BGR2RGB)
-                heat_img = cv2.addWeighted(label_patch_rgb, 0.5, img_patch_rgb, 0.5, 0)
-                binary_map = (extractor.probs_map_set_p(args.fea_threshold) *255).astype(np.uint8)
-                cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_patch.png'), heat_img)
-                cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_binary.png'), binary_map)
-            if args.label_save:
-                np.save(os.path.join(args.output_path, 'cluster_mask', \
-                                    '{}_clu_{}.npy'.format(os.path.basename(file).split('.')[0], i)), dens_patch)
+        #     # plot & save
+        #     if args.image_show:
+        #         img_patch_rgb = np.asarray(slide_patch.convert('RGB')).transpose((1,0,2))
+        #         label_patch_rgb = cv2.applyColorMap(dens_patch, cv2.COLORMAP_JET)
+        #         label_patch_rgb = cv2.cvtColor(label_patch_rgb, cv2.COLOR_BGR2RGB)
+        #         heat_img = cv2.addWeighted(label_patch_rgb, 0.5, img_patch_rgb, 0.5, 0)
+        #         binary_map = (extractor.probs_map_set_p(args.fea_threshold) *255).astype(np.uint8)
+        #         cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_patch.png'), heat_img)
+        #         cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_binary.png'), binary_map)
+        #     if args.label_save:
+        #         np.save(os.path.join(args.output_path, 'cluster_mask', \
+        #                             '{}_clu_{}.npy'.format(os.path.basename(file).split('.')[0], i)), dens_patch)
                 
-            for j, child in enumerate(cluster['child']):
-                chi_box = child['cluster']
-                dens_patch = feature_map[chi_box[0]: chi_box[0]+chi_box[2], chi_box[1]: chi_box[1]+chi_box[3]]
-                slide_patch = slide.read_region((int(chi_box[0]* slide.level_downsamples[level_output]), \
-                                            int(chi_box[1]* slide.level_downsamples[level_output])), \
-                                            level_output, (chi_box[2], chi_box[3]))
-                # feature 1
-                # total_area, num_object = 0, 0
-                # for obj in dens_patch:
-                #     total_area += int((obj > 0.5).sum())
-                #     if (obj > 0.5).sum() > 0:
-                #         num_object += 1
-                # if num_object != 0:
-                #     avg_area = total_area / num_object
-                # else:
-                #     avg_area = total_area
-                # child.update({"total_area": total_area, "avg_area": avg_area, "num_object": num_object})                
+        #     for j, child in enumerate(cluster['child']):
+        #         chi_box = child['cluster']
+        #         dens_patch = feature_map[chi_box[0]: chi_box[0]+chi_box[2], chi_box[1]: chi_box[1]+chi_box[3]]
+        #         slide_patch = slide.read_region((int(chi_box[0]* slide.level_downsamples[level_output]), \
+        #                                     int(chi_box[1]* slide.level_downsamples[level_output])), \
+        #                                     level_output, (chi_box[2], chi_box[3]))
+        #         # feature 1
+        #         # total_area, num_object = 0, 0
+        #         # for obj in dens_patch:
+        #         #     total_area += int((obj > 0.5).sum())
+        #         #     if (obj > 0.5).sum() > 0:
+        #         #         num_object += 1
+        #         # if num_object != 0:
+        #         #     avg_area = total_area / num_object
+        #         # else:
+        #         #     avg_area = total_area
+        #         # child.update({"total_area": total_area, "avg_area": avg_area, "num_object": num_object})                
                 
-                # # feature 2
-                extractor = extractor_features(dens_patch, slide_patch)
-                features = compute_features(extractor, args.fea_threshold)
-                child.update(features)
+        #         # # feature 2
+        #         extractor = extractor_features(dens_patch, slide_patch)
+        #         features = compute_features(extractor, args.fea_threshold)
+        #         child.update(features)
                 
-                # plot
-                if args.image_show:
-                    img_patch_rgb = np.asarray(slide_patch.convert('RGB')).transpose((1,0,2))
-                    label_patch_rgb = cv2.applyColorMap(dens_patch, cv2.COLORMAP_JET)
-                    label_patch_rgb = cv2.cvtColor(label_patch_rgb, cv2.COLOR_BGR2RGB)
-                    heat_img = cv2.addWeighted(label_patch_rgb, 0.5, img_patch_rgb, 0.5, 0)
-                    binary_map = (extractor.probs_map_set_p(args.fea_threshold) *255).astype(np.uint8)
-                    cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_patch.png'), heat_img)
-                    cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_binary.png'), binary_map)
-                if args.label_save: 
-                    np.save(os.path.join(args.output_path, 'cluster_mask', \
-                                        '{}_clu_{}_chi_{}.npy'.format(os.path.basename(file).split('.')[0], i, j)), dens_patch)
-                    
-        nmm_boxes_dict = [wsi_features] + nmm_boxes_dict
-        save_dict.update({file.split('.npy')[0]: nmm_boxes_dict})
+        #         # plot
+        #         if args.image_show:
+        #             img_patch_rgb = np.asarray(slide_patch.convert('RGB')).transpose((1,0,2))
+        #             label_patch_rgb = cv2.applyColorMap(dens_patch, cv2.COLORMAP_JET)
+        #             label_patch_rgb = cv2.cvtColor(label_patch_rgb, cv2.COLOR_BGR2RGB)
+        #             heat_img = cv2.addWeighted(label_patch_rgb, 0.5, img_patch_rgb, 0.5, 0)
+        #             binary_map = (extractor.probs_map_set_p(args.fea_threshold) *255).astype(np.uint8)
+        #             cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_patch.png'), heat_img)
+        #             cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_binary.png'), binary_map)
+        #         if args.label_save: 
+        #             np.save(os.path.join(args.output_path, 'cluster_mask', \
+        #                                 '{}_clu_{}_chi_{}.npy'.format(os.path.basename(file).split('.')[0], i, j)), dens_patch)
+
+        # nmm_boxes_dict = [wsi_features] + nmm_boxes_dict
+        final_boxes_dict.update({file.split('.npy')[0]: nmm_boxes_dict})
     with open(os.path.join(args.output_path, 'results.json'), 'w') as result_file:
-        json.dump(save_dict, result_file)
-    with open(os.path.join(args.output_path, 'results_nms.json'), 'w') as result_file:
-        json.dump(nms_dict, result_file)
+        json.dump(final_boxes_dict, result_file)
+    with open(os.path.join(args.output_path, 'results_boxes.json'), 'w') as result_file:
+        json.dump(dyn_boxes_dict, result_file)
