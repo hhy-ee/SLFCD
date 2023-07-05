@@ -155,7 +155,7 @@ def run(args):
         checkpoint = torch.load(os.path.join(args.save_path, 'best.ckpt'))
         summary_train = {'epoch': checkpoint['epoch'], 'step': checkpoint['step']}
         model.load_state_dict(checkpoint['state_dict'])
-    if args.init_mode == 'finetune':
+    elif args.init_mode == 'finetune':
         checkpoint = torch.load('./save_train/train_base_l1/best.ckpt')
         model.load_state_dict(checkpoint['state_dict'])
 
@@ -211,10 +211,10 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     args = parser.parse_args([
-        "./camelyon16/configs/cnn_dyn_l1.json",
-        "./save_train/train_dyn_l1"])
+        "./camelyon16/configs/cnn_fix_l1.json",
+        "./save_train/train_fix_scratch_l1"])
     args.device_ids = '0'
-    args.init_mode = 'finetune'
+    args.init_mode = 'scratch'
     run(args)
 
 

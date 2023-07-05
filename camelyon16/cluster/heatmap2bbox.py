@@ -51,11 +51,11 @@ def parse_args():
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/train/tumor', 
-                              './datasets/train/dens_map_sampling_l8',
-                              './datasets/train/crop_split_l1'])
+    args = parser.parse_args(['./datasets/test/images', 
+                              './datasets/test/dens_map_sampling_l8',
+                              './datasets/test/crop_split_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = [100, 2000]    # ITC_threshold / (0.243 * pow(2, level))
+    args.itc_threshold = [100, 500]    # ITC_threshold / (0.243 * pow(2, level))
     args.ini_patchsize = 256
     args.nms_threshold = 0.5
     args.nmm_threshold = 0.1
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     level_input = 3
     level_output = int(args.output_path.split('l')[-1])
 
-    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_prior)))
+    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
     
     for file in tqdm(sorted(dir), total=len(dir)):
         # if os.path.exists(os.path.join(args.output_path, os.path.basename(file_name).replace('.tif','.png'))):
@@ -115,7 +115,9 @@ if __name__ == "__main__":
             img_rgb = slide.read_region((0, 0), level_show, \
                         tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
             img_rgb = np.asarray(img_rgb).transpose((1,0,2))
-            prior_rgb = cv2.applyColorMap(prior_map.astype(np.uint8), cv2.COLORMAP_JET)
+            show_shape = tuple([int(i / 2**level_show) for i in slide.level_dimensions[0]])
+            prior_show = cv2.resize(prior_map, (show_shape[1], show_shape[0]), interpolation=cv2.INTER_CUBIC)
+            prior_rgb = cv2.applyColorMap(prior_show.astype(np.uint8), cv2.COLORMAP_JET)
             prior_rgb = cv2.cvtColor(prior_rgb, cv2.COLOR_BGR2RGB)
             heat_img = cv2.addWeighted(prior_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
             img = Image.fromarray(heat_img)
@@ -180,11 +182,10 @@ if __name__ == "__main__":
         
         # dynamic patches
         _, nms_boxes_dict = NMS(boxes_edge, args.nms_threshold, score_refine=True)
+        boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
         first_nms_boxes_dict = nms_boxes_dict
         while len(nms_boxes_dict) != len(boxes_edge):
-            boxes_dyn = []
-            for i in nms_boxes_dict:
-                boxes_dyn += [i['keep']] + i['rege']
+            boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
             boxes_re_nms = np.array([[i[0], i[1], i[0] + i[2], i[1] + i[3], i[4]] for i in boxes_dyn])
             _, nms_boxes_dict = NMS(boxes_re_nms, args.nms_threshold)
         boxes_dyn = [[i[0], i[1], i[0]+i[2], i[1]+i[3], i[4]] for i in boxes_dyn]
@@ -200,7 +201,7 @@ if __name__ == "__main__":
             img.save(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_dyn.png'))
 
         # save 2
-        boxes_save = [{'keep': i[:4]} for i in boxes_dyn]
+        boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_dyn]
         dyn_boxes_dict.update({file.split('.npy')[0]: boxes_save})
         
         # NMM

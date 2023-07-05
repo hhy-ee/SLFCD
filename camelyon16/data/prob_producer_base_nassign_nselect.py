@@ -25,8 +25,13 @@ class WSIPatchDataset(Dataset):
         for assign in self._assign: 
             key = tuple(zip(assign))[0][0]
             o_x1, o_y1, w, h = assign[key][0], assign[key][1], assign[key][2], assign[key][3]
+            
+            # w, h = assign[key][2]*2, assign[key][3]*2
+            # o_x1, o_y1 = assign[key][0] - assign[key][2]//2, assign[key][1] - assign[key][3]//2
+            
             o_s_x1 = int(o_x1 * self._slide.level_downsamples[self._level_ckpt])
             o_s_y1 = int(o_y1 * self._slide.level_downsamples[self._level_ckpt])
+            
             o_x2 = o_x1 + w
             o_y2 = o_y1 + h
             
@@ -64,7 +69,7 @@ class WSIPatchDataset(Dataset):
             # torch image: C X H X W
 
         if self._args.batch_inf:
-            img = img.resize((self._patch_size, self._patch_size))
+            img = img.resize((self._patch_size,)*2)
         img = np.array(img, dtype=np.float32).transpose((2, 1, 0))
         
         if self._normalize:
