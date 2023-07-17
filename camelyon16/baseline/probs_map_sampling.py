@@ -122,13 +122,15 @@ def run(args):
     model = model.cuda().eval()
     
     time_total = 0.0
-    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
-    for file in sorted(dir):
-        if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
-            continue
+    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
+    for file in sorted(dir)[80:]:
+        # if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
+        #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
-        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample), file))
-
+        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6', file))
+        tissue_shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
+        tissue = transform.resize(tissue, tissue_shape)
+        
         # calculate heatmap & runtime
         dataloader = make_dataloader(
             args, cnn, slide, tissue, level_sample, level_ckpt, flip='NONE', rotate='NONE')
@@ -157,26 +159,12 @@ def run(args):
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
 
 def main():
-    # args = parser.parse_args([
-    #     "/media/ps/passport2/hhy/camelyon16/test/images",
-    #     "/home/ps/hhy/slfcd/save_train/train_base_l1",
-    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
-    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l6'])
-    # args.GPU = "2"
-
-    # args = parser.parse_args([
-    #     "/media/ps/passport2/hhy/camelyon16/test/images",
-    #     "/home/ps/hhy/slfcd/save_train/train_base_l0",
-    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l0.json",
-    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l6']) 
-    # args.GPU = "1"
-
     args = parser.parse_args([
-        "./datasets/train/tumor",
+        "./datasets/test/images",
         "./save_train/train_base_l1",
         "./camelyon16/configs/cnn_base_l1.json",
-        './datasets/train/dens_map_sampling_l8'])
-    args.GPU = "0"
+        './datasets/test/dens_map_sampling_l9'])
+    args.GPU = "1"
     
     run(args)
 

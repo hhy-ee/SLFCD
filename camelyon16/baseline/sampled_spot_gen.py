@@ -51,18 +51,24 @@ class patch_point_in_mask_gen(object):
         # find normal point
         mask_tissue = np.load(self.tissue_path)
         mask_normal = mask_tissue & (~ mask_tumor)
+        mask_gound = ~ mask_tissue
         X_idcs2, Y_idcs2 = np.where(mask_normal)
+        X_idcs3, Y_idcs3 = np.where(mask_gound)
 
         centre_points_tumor = np.stack(np.vstack((X_idcs1.T, Y_idcs1.T)), axis=1)
         centre_points_normal = np.stack(np.vstack((X_idcs2.T, Y_idcs2.T)), axis=1)
+        centre_points_ground = np.stack(np.vstack((X_idcs3.T, Y_idcs3.T)), axis=1)
 
         sampled_points_tumor = centre_points_tumor[np.random.choice(centre_points_tumor.shape[0],
                                     min(self.number, len(centre_points_tumor)), replace=False), :]
             
         sampled_points_normal = centre_points_normal[np.random.choice(centre_points_normal.shape[0],
-                                                                    self.number, replace=False), :]
+                                                self.number - self.number // 10, replace=False), :]
 
-        sampled_points = np.concatenate((sampled_points_tumor, sampled_points_normal), axis=0)
+        sampled_points_ground = centre_points_ground[np.random.choice(centre_points_ground.shape[0],
+                                                            self.number // 10, replace=False), :]
+        
+        sampled_points = np.concatenate((sampled_points_tumor, sampled_points_normal, sampled_points_ground), axis=0)
 
         return (sampled_points * 2 ** (mask_level-self.level)).astype(np.int32)
 
@@ -70,8 +76,6 @@ class patch_point_in_mask_gen(object):
 def run(args):
     dir = os.listdir(args.tissue_path)
     for file in tqdm(sorted(dir), total=len(dir)):
-        if file != 'tumor_082.npy':
-            continue
         tumor_path = os.path.join(args.tumor_path, file.split('.')[0] + '.npy')
         tissue_path = os.path.join(args.tissue_path, file.split('.')[0] + '.npy')
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('_')[0], file.split('.')[0]+'.tif'))

@@ -74,6 +74,13 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
     time_now = time.time()
     time_total = 0.
     
+    # file_name = slide._filename.split('/')[-1].replace('tif', 'npy')
+    # if file_name in os.listdir('./datasets/test/tumor_mask_l6'):
+    #     label = np.load(os.path.join('./datasets/test/tumor_mask_l6', file_name))
+    #     label = transform.resize(label, (slide.level_dimensions[level_save]))
+    # else:
+    #     label = np.zeros(slide.level_dimensions[level_save])
+        
     with torch.no_grad():
         for (data, box, moved_box) in dataloader:
             data = Variable(data.cuda(non_blocking=True))
@@ -89,6 +96,36 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
                         patch_prob = transform.resize(patch_prob, (box[i][j][2]-box[i][j][0], box[i][j][3]-box[i][j][1]))
                         probs_map[box[i][j][0]:box[i][j][2], box[i][j][1]:box[i][j][3]] += patch_prob
 
+            # #plot
+            # probs_split = np.zeros((1024, 1024))
+            # probs_aggre = np.zeros((1024, 1024))
+            # label_canvas = np.zeros((1024, 1024))
+            # for i in range(probs.shape[0]):
+            #     for j in range(box.shape[1]):
+            #         moved_box_w = int(moved_box[i][j][2]-moved_box[i][j][0])
+            #         moved_box_h = int(moved_box[i][j][3]-moved_box[i][j][1])
+            #         if moved_box_w != 0 and moved_box_h != 0:
+            #             patch = data[:, :, moved_box[i][j][0]:moved_box[i][j][2], moved_box[i][j][1]:moved_box[i][j][3]]
+            #             patch_resize = transform.resize(patch.cpu().data.numpy(), (1, 3, 256, 256))
+            #             patch_resize = Variable(torch.tensor(patch_resize).cuda(non_blocking=True))
+            #             output_resize = model(patch_resize)['out'][:, :].sigmoid().cpu().data.numpy()
+            #             output_patch1 = transform.resize(output_resize[0,0,:], (moved_box_w, moved_box_h))
+            #             output_patch2 = probs[i, 0, moved_box[i][j][0]:moved_box[i][j][2], moved_box[i][j][1]:moved_box[i][j][3]]
+            #             probs_split[moved_box[i][j][0]:moved_box[i][j][2], moved_box[i][j][1]:moved_box[i][j][3]] = output_patch1
+            #             probs_aggre[moved_box[i][j][0]:moved_box[i][j][2], moved_box[i][j][1]:moved_box[i][j][3]] = output_patch2
+            #             label_patch = label[box[i][j][0]:box[i][j][2], box[i][j][1]:box[i][j][3]]
+            #             label_patch = transform.resize(label_patch, (moved_box_w, moved_box_h))
+            #             label_canvas[moved_box[i][j][0]:moved_box[i][j][2], moved_box[i][j][1]:moved_box[i][j][3]] = label_patch
+                        
+            # cv2.imwrite('./datasets/test/dens_map_assign_l6/example/{}_bg.png'.format(count), \
+            #                         ((data.cpu().data.numpy()*128)+128).astype(np.uint8)[0,:].transpose(1,2,0))
+            # cv2.imwrite('./datasets/test/dens_map_assign_l6/example/{}_pd1.png'.format(count), \
+            #                         (probs_aggre*255).astype(np.uint8))
+            # cv2.imwrite('./datasets/test/dens_map_assign_l6/example/{}_pd2.png'.format(count), \
+            #                         (probs_split*255).astype(np.uint8))
+            # cv2.imwrite('./datasets/test/dens_map_assign_l6/example/{}_gt.png'.format(count), \
+            #                         (label_canvas*255).astype(np.uint8))
+            
             count += 1
             time_spent = time.time() - time_now
             time_now = time.time()
@@ -142,7 +179,7 @@ def run(args):
 
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
-    for file in sorted(dir)[77:84]:
+    for file in sorted(dir)[80:]:
         # if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
@@ -169,7 +206,7 @@ def run(args):
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
         np.save(os.path.join(args.probs_path, 'model_l{}'.format(level_ckpt), \
-                                 'save_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+                                 'save_dyn_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -180,7 +217,7 @@ def run(args):
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_path, 'model_l{}'.format(level_ckpt), \
-                                   'save_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+                                   'save_dyn_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -188,8 +225,8 @@ def run(args):
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_base_l1",
-        "./camelyon16/configs/cnn_base_l1.json",
+        "./save_train/train_dyn_l1",
+        "./camelyon16/configs/cnn_dyn_l1.json",
         './datasets/test/dens_map_sampling_l8/model_l1/save_l3',
         "./datasets/test/crop_split_l1/assign.json",
         './datasets/test/dens_map_assign_l6'])

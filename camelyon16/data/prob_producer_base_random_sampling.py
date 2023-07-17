@@ -34,7 +34,8 @@ class WSIPatchDataset(Dataset):
         self.first_stage_map, self.dist_from_edge, self.nearest_bg_coord, self.feature_region_conf = self._prior
         
         self._POI = (self.dist_from_edge == 1)
-        # self._POI = (self.dist_from_edge == 1) * (9 - self.feature_region_conf // 32)
+        # self._POI = (self.dist_from_edge >= 1)
+
         # self._POI = self.dynamic_sliding_window1(nmm_threshold=0.3)
         # self._POI = self.dynamic_sliding_window2()
         

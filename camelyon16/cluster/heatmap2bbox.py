@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
     args = parser.parse_args(['./datasets/test/images', 
-                              './datasets/test/dens_map_sampling_l8',
+                              './datasets/test/dens_map_sampling_l9',
                               './datasets/test/crop_split_l1'])
     args.roi_threshold = 0.1
     args.itc_threshold = [100, 500]    # ITC_threshold / (0.243 * pow(2, level))

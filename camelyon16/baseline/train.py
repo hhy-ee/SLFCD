@@ -211,9 +211,9 @@ def main():
     logging.basicConfig(level=logging.INFO)
 
     args = parser.parse_args([
-        "./camelyon16/configs/cnn_fix_l1.json",
-        "./save_train/train_fix_scratch_l1"])
-    args.device_ids = '0'
+        "./camelyon16/configs/cnn_dyn_l1.json",
+        "./save_train/train_dyn_l1"])
+    args.device_ids = '1'
     args.init_mode = 'scratch'
     run(args)
 

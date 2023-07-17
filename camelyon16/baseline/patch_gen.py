@@ -44,6 +44,10 @@ def process(opts, slide, level, tumor_mask=None):
     l = int(x_center) - patch_size // 2
     t = int(y_center) - patch_size // 2
     
+    w, h = tumor_mask.shape
+    l = min(max(0, l), w - patch_size)
+    t = min(max(0, t), h - patch_size)
+    
     x = int(l * slide.level_downsamples[level])
     y = int(t * slide.level_downsamples[level])
 
@@ -116,7 +120,7 @@ def main():
     args = parser.parse_args([
         "./datasets/train",
         "./datasets/train/sample_gen_l1",
-        "./datasets/train/patch_gen_fix_l1"])
+        "./datasets/train/patch_gen_dyn_l1"])
     args.patch_size = 256
     args.patch_mode = 'dyn'
     run(args)
