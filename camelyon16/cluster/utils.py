@@ -408,7 +408,7 @@ def NMM(boxes, iouthreshold):
 
     return boxes[pick].astype("int"), nmm_boxes
 
-def NMS(boxes, iouthreshold, score_refine=False):
+def NMS(boxes, iouthreshold, box_shrink=False):
     """
     """
     # if there are no boxes, return an empty list
@@ -468,7 +468,7 @@ def NMS(boxes, iouthreshold, score_refine=False):
                                        np.where(overlap > iouthreshold)[0]))
         supp_idxs = np.where(overlap > iouthreshold)[0]
         idxs=np.array(idxs)
-        if score_refine:
+        if box_shrink:
             keep_dict = {'keep':[int(x1[i]), int(y1[i]), int(x2[i]-x1[i]), int(y2[i]-y1[i]), 255.0+len(boxes)-count, scr[i]]}
         else:
             keep_dict = {'keep':[int(x1[i]), int(y1[i]), int(x2[i]-x1[i]), int(y2[i]-y1[i]), scr[i]]}
@@ -481,28 +481,28 @@ def NMS(boxes, iouthreshold, score_refine=False):
             supp_box_h = y2[idxs[box_idx]] - y1[idxs[box_idx]]
             supp_list.append([int(supp_box_x1), int(supp_box_y1), int(supp_box_w), int(supp_box_h), scr[idxs[box_idx]]])
             
-            while (w[box_idx] * h[box_idx]) / area[i] > iouthreshold:
-                x1[idxs[box_idx]] += 16
-                x2[idxs[box_idx]] -= 16
-                y1[idxs[box_idx]] += 16
-                y2[idxs[box_idx]] -= 16
-                w[box_idx] = np.maximum(0, np.minimum(x2[i], x2[idxs[box_idx]]) - np.maximum(x1[i], x1[idxs[box_idx]]))
-                h[box_idx] = np.maximum(0, np.minimum(y2[i], y2[idxs[box_idx]]) - np.maximum(y1[i], y1[idxs[box_idx]]))
+            if box_shrink:
+                while (w[box_idx] * h[box_idx]) / area[i] > iouthreshold:
+                    x1[idxs[box_idx]] += 16
+                    x2[idxs[box_idx]] -= 16
+                    y1[idxs[box_idx]] += 16
+                    y2[idxs[box_idx]] -= 16
+                    w[box_idx] = np.maximum(0, np.minimum(x2[i], x2[idxs[box_idx]]) - np.maximum(x1[i], x1[idxs[box_idx]]))
+                    h[box_idx] = np.maximum(0, np.minimum(y2[i], y2[idxs[box_idx]]) - np.maximum(y1[i], y1[idxs[box_idx]]))
                 
-            rege_box_x1 = x1[idxs[box_idx]]
-            rege_box_y1 = y1[idxs[box_idx]]
-            rege_box_w = x2[idxs[box_idx]] - x1[idxs[box_idx]]
-            rege_box_h = y2[idxs[box_idx]] - y1[idxs[box_idx]]
-            rege_list.append([int(rege_box_x1), int(rege_box_y1), int(rege_box_w), int(rege_box_h), scr[idxs[box_idx]]])
-            
-        keep_dict.update({'supp': supp_list, 'rege': rege_list})
+                rege_box_x1 = x1[idxs[box_idx]]
+                rege_box_y1 = y1[idxs[box_idx]]
+                rege_box_w = x2[idxs[box_idx]] - x1[idxs[box_idx]]
+                rege_box_h = y2[idxs[box_idx]] - y1[idxs[box_idx]]
+                rege_list.append([int(rege_box_x1), int(rege_box_y1), int(rege_box_w), int(rege_box_h), scr[idxs[box_idx]]])
+        
+        if box_shrink:
+            keep_dict.update({'rege': rege_list})
+        keep_dict.update({'supp': supp_list})
         nms_boxes.append(keep_dict)
 
-        # boxes[i,:4]=np.array([xx1,yy1,xx2,yy2])
         # delete all indexes from the index list that have
         idxs=np.delete(idxs,delete_idxs)
         count += 1
-    # return only the bounding boxes that were picked using the
-    # integer data type
 
     return boxes[pick].astype("int"), nms_boxes

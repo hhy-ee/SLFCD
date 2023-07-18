@@ -51,9 +51,9 @@ def parse_args():
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/test/images', 
-                              './datasets/test/dens_map_sampling_l9',
-                              './datasets/test/crop_split_l1'])
+    args = parser.parse_args(['./datasets/train/tumor', 
+                              './datasets/train/dens_map_sampling_l8',
+                              './datasets/train/crop_split_l1'])
     args.roi_threshold = 0.1
     args.itc_threshold = [100, 500]    # ITC_threshold / (0.243 * pow(2, level))
     args.ini_patchsize = 256
@@ -181,7 +181,7 @@ if __name__ == "__main__":
             img.save(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_nms.png'))
         
         # dynamic patches
-        _, nms_boxes_dict = NMS(boxes_edge, args.nms_threshold, score_refine=True)
+        _, nms_boxes_dict = NMS(boxes_edge, args.nms_threshold, box_shrink=True)
         boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
         first_nms_boxes_dict = nms_boxes_dict
         while len(nms_boxes_dict) != len(boxes_edge):
