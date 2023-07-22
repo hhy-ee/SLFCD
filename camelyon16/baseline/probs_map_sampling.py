@@ -52,27 +52,34 @@ def chose_model(mod):
     return model
 
 
-def get_probs_map(model, slide, level, dataloader):
+def get_probs_map(model, slide, level_save, level_ckpt, dataloader):
 
-    probs_map = np.zeros(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
-    counter = np.zeros(tuple([int(i / 2**level) for i in slide.level_dimensions[0]]))
+    shape = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
+    resolution = 2 ** (level_save - level_ckpt)
+    probs_map = np.zeros(shape)
+    counter = np.zeros(shape)
+
     num_batch = len(dataloader)
-
+    
     count = 0
     time_now = time.time()
     time_total = 0.
+    
     with torch.no_grad():
-        for (data, rect, shape) in dataloader:
+        for (data, rect, box) in dataloader:
             data = Variable(data.cuda(non_blocking=True))
             output = model(data)
-            # because of torch.squeeze at the end of forward in resnet.py, if the
-            # len of dim_0 (batch_size) of data is 1, then output removes this dim.
-            # should be fixed in resnet.py by specifying torch.squeeze(dim=2) later
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
+            
+            rect = [(item / resolution).to(torch.int) for item in rect]
+            box = [(item / resolution).to(torch.int) for item in box]
             for bs in range(probs.shape[0]):
-                counter[rect[0][bs]:rect[2][bs], rect[1][bs]:rect[3][bs]] += 1
-                probs_map[rect[0][bs]:rect[2][bs], rect[1][bs]:rect[3][bs]] += \
-                        probs[bs, 0, shape[0][bs]:shape[2][bs], shape[1][bs]:shape[3][bs]]
+                left, top, right, bot = rect[0][bs], rect[1][bs], rect[2][bs], rect[3][bs]
+                l, t, r, b, s = box[0][bs], box[1][bs], box[2][bs], box[3][bs], box[4][bs]
+                prob = transform.resize(probs[bs, 0], (s, s))
+                counter[left: right, top: bot] += 1
+                probs_map[left: right, top: bot] += prob[l: r, t: b]
+
             count += 1
             time_spent = time.time() - time_now
             time_now = time.time()
@@ -127,14 +134,27 @@ def run(args):
         # if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
-        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6', file))
         tissue_shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
+        
+        # old tissue
+        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6', file))
         tissue = transform.resize(tissue, tissue_shape)
         
+        # new tissue
+        rgb_image = slide.read_region((0, 0), level_show,
+            tuple([int(i / 2**level_show) for i in slide.level_dimensions[0]]))
+        rgb_image = np.array(rgb_image).transpose(1,0,2)
+        hsv = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2HSV)
+        lower_red = np.array([20, 20, 20])
+        upper_red = np.array([200, 200, 200])
+        # mask -> 1 channel
+        mask = cv2.inRange(hsv, lower_red, upper_red)
+        tissue = np.logical_or(transform.resize((mask > 127), tissue_shape), tissue)
+    
         # calculate heatmap & runtime
         dataloader = make_dataloader(
             args, cnn, slide, tissue, level_sample, level_ckpt, flip='NONE', rotate='NONE')
-        probs_map, time_network = get_probs_map(model, slide, level_ckpt, dataloader)
+        probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader)
         time_total += time_network
 
         # save heatmap
@@ -161,10 +181,10 @@ def run(args):
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_base_l1",
-        "./camelyon16/configs/cnn_base_l1.json",
-        './datasets/test/dens_map_sampling_l9'])
-    args.GPU = "1"
+        "./save_train/train_fix_l1",
+        "./camelyon16/configs/cnn_fix_l1.json",
+        './datasets/test/dens_map_sampling1_l9'])
+    args.GPU = "2"
     
     run(args)
 

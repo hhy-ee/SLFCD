@@ -39,12 +39,11 @@ def process(opts, slide, level, tumor_mask=None):
         patch_size = args.patch_size
     elif args.patch_mode == 'dyn':
         patch_size = np.random.randint(2,16) * 32
-        # patch_size = np.random.randint(2,9) * 32
         
     l = int(x_center) - patch_size // 2
     t = int(y_center) - patch_size // 2
     
-    w, h = tumor_mask.shape
+    w, h = tuple([int(i / 2**level) for i in slide.level_dimensions[0]])
     l = min(max(0, l), w - patch_size)
     t = min(max(0, t), h - patch_size)
     
@@ -91,6 +90,8 @@ def run(args):
     logging.basicConfig(level=logging.INFO)
     dir = os.listdir(args.coords_path)
     for file in tqdm(sorted(dir), total=len(dir)):
+        if not 'tumor' in file:
+            continue
         if not os.path.exists(os.path.join(args.patch_path, file.split('.')[0])):
             os.mkdir(os.path.join(args.patch_path, file.split('.')[0]))
             copyfile(os.path.join(args.coords_path, file.split('.')[0] + '.txt') , \
@@ -117,10 +118,18 @@ def run(args):
 
 
 def main():
+    # args = parser.parse_args([
+    #     "./datasets/train",
+    #     "./datasets/train/sample_gen_l1",
+    #     "./datasets/train/patch_gen_fix_l1"])
+    # args.patch_size = 256
+    # args.patch_mode = 'fix'
+    # run(args)
+    
     args = parser.parse_args([
         "./datasets/train",
-        "./datasets/train/sample_gen_l1",
-        "./datasets/train/patch_gen_dyn_l1"])
+        "./datasets/train/sample_gen_l0",
+        "./datasets/train/patch_gen_ddyynn_l0"])
     args.patch_size = 256
     args.patch_mode = 'dyn'
     run(args)

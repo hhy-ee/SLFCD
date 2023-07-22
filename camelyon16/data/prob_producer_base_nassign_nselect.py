@@ -6,8 +6,8 @@ from torch.utils.data import Dataset
 
 class WSIPatchDataset(Dataset):
 
-    def __init__(self, slide, level_ckpt, assign, args,
-                 image_size=256, normalize=True, flip='NONE', rotate='NONE'):
+    def __init__(self, slide, level_ckpt, assign, args, image_size=256, 
+                 normalize=True, flip='NONE', rotate='NONE'):
         self._slide = slide
         self._level_ckpt = level_ckpt
         self._assign = assign
@@ -22,6 +22,7 @@ class WSIPatchDataset(Dataset):
         self.image_batch = []
         self.boxes = []
         self.patches = []
+        self._image_size = tuple([int(i / 2**self._level_ckpt) for i in self._slide.level_dimensions[0]])
         for assign in self._assign: 
             key = tuple(zip(assign))[0][0]
             o_x1, o_y1, w, h = assign[key][0], assign[key][1], assign[key][2], assign[key][3]
@@ -75,4 +76,14 @@ class WSIPatchDataset(Dataset):
         if self._normalize:
             img = (img - 128.0) / 128.0
 
-        return (img, box)
+        patch_l = max(box[0], 0)
+        patch_r = min(box[2], self._image_size[0])
+        patch_t = max(box[1], 0)
+        patch_b = min(box[3], self._image_size[1])
+        
+        box_l = patch_l - box[0]
+        box_r = w + patch_r - box[2]
+        box_t = patch_t - box[1]
+        box_b = h + patch_b - box[3]
+        
+        return (img, (patch_l, patch_t, patch_r, patch_b), (box_l, box_t, box_r, box_b, w, h))

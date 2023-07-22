@@ -47,11 +47,12 @@ class patch_point_in_mask_gen(object):
             mask_tumor = np.load(self.tumor_path)
         else:
             mask_tumor = np.zeros(tissue_shape) > 127
-        X_idcs1, Y_idcs1 = np.where(mask_tumor)
-        # find normal point
+        # find normal & background point
         mask_tissue = np.load(self.tissue_path)
         mask_normal = mask_tissue & (~ mask_tumor)
         mask_gound = ~ mask_tissue
+        
+        X_idcs1, Y_idcs1 = np.where(mask_tumor)
         X_idcs2, Y_idcs2 = np.where(mask_normal)
         X_idcs3, Y_idcs3 = np.where(mask_gound)
 
@@ -60,13 +61,13 @@ class patch_point_in_mask_gen(object):
         centre_points_ground = np.stack(np.vstack((X_idcs3.T, Y_idcs3.T)), axis=1)
 
         sampled_points_tumor = centre_points_tumor[np.random.choice(centre_points_tumor.shape[0],
-                                    min(self.number, len(centre_points_tumor)), replace=False), :]
+                                     min(self.number, len(centre_points_tumor)), replace=False), :]
             
         sampled_points_normal = centre_points_normal[np.random.choice(centre_points_normal.shape[0],
-                                                self.number - self.number // 10, replace=False), :]
+                                                    self.number-self.number//10, replace=False), :]
 
         sampled_points_ground = centre_points_ground[np.random.choice(centre_points_ground.shape[0],
-                                                            self.number // 10, replace=False), :]
+                                                              self.number // 10, replace=False), :]
         
         sampled_points = np.concatenate((sampled_points_tumor, sampled_points_normal, sampled_points_ground), axis=0)
 
@@ -100,6 +101,12 @@ def main():
         "./datasets/train/tissue_mask_l6",
         "./datasets/train/sample_gen_l1",
         '1000'])
+    # args = parser.parse_args([
+    #     "./datasets/train/",
+    #     "./datasets/train/tumor_mask_l5",
+    #     "./datasets/train/tissue_mask_l5",
+    #     "./datasets/train/sample_gen_l0",
+    #     '2000'])
     run(args)
 
 

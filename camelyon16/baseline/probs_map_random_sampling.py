@@ -67,7 +67,7 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
     shape = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
     resolution = 2 ** (level_save - level_ckpt)
     if prior is not None:
-        probs_map = cv2.resize(prior, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC) / 255
+        probs_map = prior / 255
         counter = np.ones(shape)
     else:
         probs_map = np.zeros(shape)
@@ -80,17 +80,19 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
     time_total = 0.
     
     with torch.no_grad():
-        for (data, rect, size) in dataloader:
+        for (data, rect, box) in dataloader:
             data = Variable(data.cuda(non_blocking=True))
             output = model(data)
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
 
             rect = [(item / resolution).to(torch.int) for item in rect]
+            box = [(item / resolution).to(torch.int) for item in box]
             for bs in range(probs.shape[0]):
-                l, t, r, b = rect[0][bs], rect[1][bs], rect[2][bs], rect[3][bs]
-                prob = transform.resize(probs[bs, 0], (r - l, b - t))
-                counter[l: r, t: b] += 1
-                probs_map[l: r, t: b] += prob
+                left, top, right, bot = rect[0][bs], rect[1][bs], rect[2][bs], rect[3][bs]
+                l, t, r, b, s = box[0][bs], box[1][bs], box[2][bs], box[3][bs], box[4][bs]
+                prob = transform.resize(probs[bs, 0], (s, s))
+                counter[left: right, top: bot] += 1
+                probs_map[left: right, top: bot] += prob[l: r, t: b]
 
             count += 1
             time_spent = time.time() - time_now
@@ -141,18 +143,18 @@ def run(args):
     model = model.cuda().eval()
     
     time_total = 0.0
-    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
+    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
     for file in sorted(dir)[80:]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-        #                             'save_roitt_0.1_min_100_edge_1_dyn2_512_size_l{}'.format(level_save), file)):
+        #                             'save_roi_th_0.1_min1e0_max1e9_whole_fixmodel_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         
         # compute Point of Interest (POI)
         first_stage_map = np.load(os.path.join(args.prior_path, file))
         shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
-        first_stage_map = cv2.resize(first_stage_map, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC)
-        POI = (first_stage_map / 255) > args.roi_threshold
+        prior_map = cv2.resize(first_stage_map, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC)
+        POI = (prior_map / 255) > args.roi_threshold
         # Computes the inference mask
         filled_image = nd.morphology.binary_fill_holes(POI)
         evaluation_mask = measure.label(filled_image, connectivity=2)
@@ -171,7 +173,7 @@ def run(args):
         
         # generate distance map
         distance, coord = nd.distance_transform_edt(filled_mask, return_indices=True)
-        prior = (first_stage_map, distance, coord, feature_map)
+        prior = (prior_map, distance, coord, feature_map)
 
         # calculate heatmap & runtime
         dataloader = make_dataloader(
@@ -184,7 +186,7 @@ def run(args):
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
         np.save(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                    'save_roi_th_0.1_min0_max500_edge_dyn_l{}'.format(level_save), file), probs_map)
+            'save_roi_th_0.1_min1e0_max1e9_whole_fixmodel_l{}'.format(level_save), file), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -195,7 +197,7 @@ def run(args):
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                    'save_roi_th_0.1_min0_max500_edge_dyn_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+            'save_roi_th_0.1_min1e0_max5e2_edge_fixmodel_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -203,14 +205,14 @@ def run(args):
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_dyn_l1",
-        "./camelyon16/configs/cnn_dyn_l1.json",
+        "./save_train/train_fix_l1",
+        "./camelyon16/configs/cnn_fix_l1.json",
         './datasets/test/dens_map_sampling_l9/model_l1/save_l3',
-        './datasets/test/dens_map_sampling_2s_l6'])
-    args.roi_generator = 'prior_l9'
+        './datasets/test/dens_map_sampling_2s_l5'])
+    args.roi_generator = 'prior_l8'
     args.roi_threshold = 0.1
-    args.itc_threshold = [0, 500]
-    args.GPU = "2"
+    args.itc_threshold = [1e0, 5e2]
+    args.GPU = "1"
     
     run(args)
 
