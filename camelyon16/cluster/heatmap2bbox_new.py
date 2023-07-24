@@ -52,7 +52,7 @@ def parse_args():
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
     args = parser.parse_args(['./datasets/test/images', 
-                              './datasets/test/dens_map_sampling_l9',
+                              './datasets/test/dens_map_sampling_l8',
                               './datasets/test/crop_split_l1'])
     args.roi_threshold = 0.1
     args.itc_threshold = (1e0, 5e2)
@@ -167,44 +167,46 @@ if __name__ == "__main__":
             tc_Y = filtered_properties[i].coords[:,1]
             for idx in range(len(tc_X)):
                 x_center, y_center = tc_X[idx], tc_Y[idx]
-                patch_size = args.ini_patchsize // scale_out
-                l = x_center * scale_in - patch_size // 2
-                t = y_center * scale_in - patch_size // 2
-                r, b = l + patch_size, t + patch_size
-                pos_idx = np.where(first_stage_map[l: r, t: b] / 255 > args.roi_threshold)
-                scr = first_stage_map[l: r, t: b][pos_idx].mean()
-                l, t, r, b = l * scale_out, t * scale_out, r * scale_out, b  * scale_out
-                boxes_tumor.append([l, t, r, b, scr])
+                edge_dist = distance[x_center, y_center]
+                if edge_dist == 1:
+                    patch_size = args.ini_patchsize // scale_out
+                    l = x_center * scale_in - patch_size // 2
+                    t = y_center * scale_in - patch_size // 2
+                    r, b = l + patch_size, t + patch_size
+                    pos_idx = np.where(first_stage_map[l: r, t: b] / 255 > args.roi_threshold)
+                    scr = first_stage_map[l: r, t: b][pos_idx].mean()
+                    l, t, r, b = l * scale_out, t * scale_out, r * scale_out, b  * scale_out
+                    boxes_tumor.append([l, t, r, b, scr])
             
             # save fix-sized patches
             # boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_tumor]
             # dyn_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
 
             # dynamic patches 1
-            boxes_dyn = []
-            for idx in range(len(tc_X)):
-                x_center, y_center = tc_X[idx], tc_Y[idx]
-                edge_dist = distance[x_center, y_center]
-                if edge_dist == 1:
-                    dyn_patch_size = max(args.ini_patchsize // edge_dist, 64)
-                    dyn_patch_size = int(dyn_patch_size // scale_out)
-                    l = x_center * scale_in - dyn_patch_size // 2
-                    t = y_center * scale_in - dyn_patch_size // 2
-                    r, b = l + dyn_patch_size, t + dyn_patch_size
-                    l, t, r, b = l * scale_out, t * scale_out, r * scale_out, b  * scale_out
-                    boxes_dyn.append([l, t, r, b, boxes_tumor[idx][-1]])
+            # boxes_dyn = []
+            # for idx in range(len(tc_X)):
+            #     x_center, y_center = tc_X[idx], tc_Y[idx]
+            #     edge_dist = distance[x_center, y_center]
+            #     if edge_dist == 1:
+            #         dyn_patch_size = max(args.ini_patchsize // edge_dist, 64)
+            #         dyn_patch_size = int(dyn_patch_size // scale_out)
+            #         l = x_center * scale_in - dyn_patch_size // 2
+            #         t = y_center * scale_in - dyn_patch_size // 2
+            #         r, b = l + dyn_patch_size, t + dyn_patch_size
+            #         l, t, r, b = l * scale_out, t * scale_out, r * scale_out, b  * scale_out
+            #         boxes_dyn.append([l, t, r, b, boxes_tumor[idx][-1]])
 
 
             # dynamic patches 2
-            # boxes_tumor = np.array(boxes_tumor)
-            # _, nms_boxes_dict = NMS(boxes_tumor, args.nms_threshold, box_shrink=True)
-            # boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
-            # first_nms_boxes_dict = nms_boxes_dict
-            # while len(nms_boxes_dict) != len(boxes_tumor):
-            #     boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
-            #     boxes_re_nms = np.array([[i[0], i[1], i[0] + i[2], i[1] + i[3], i[4]] for i in boxes_dyn])
-            #     _, nms_boxes_dict = NMS(boxes_re_nms, args.nms_threshold, box_shrink=True)
-            # boxes_dyn = [[i[0], i[1], i[0]+i[2], i[1]+i[3], i[4]] for i in boxes_dyn]
+            boxes_tumor = np.array(boxes_tumor)
+            _, nms_boxes_dict = NMS(boxes_tumor, args.nms_threshold, box_shrink=True)
+            boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
+            first_nms_boxes_dict = nms_boxes_dict
+            while len(nms_boxes_dict) != len(boxes_tumor):
+                boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
+                boxes_re_nms = np.array([[i[0], i[1], i[0] + i[2], i[1] + i[3], i[4]] for i in boxes_dyn])
+                _, nms_boxes_dict = NMS(boxes_re_nms, args.nms_threshold, box_shrink=True)
+            boxes_dyn = [[i[0], i[1], i[0]+i[2], i[1]+i[3], i[4]] for i in boxes_dyn]
             # boxes_dyn = [i['keep'][:4] + [i['keep'][5]] for i in first_nms_boxes_dict] + boxes_dyn[len(first_nms_boxes_dict):]
 
             total_boxes_dyn += boxes_dyn
@@ -213,18 +215,18 @@ if __name__ == "__main__":
             boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_dyn]
             dyn_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
 
-            # # NMS
-            # boxes_dyn = np.array(boxes_dyn)
-            # keep_boxes_list, nms_boxes_dict = NMS(boxes_dyn, args.nms_threshold)
-            # boxes_nms = [list(i) for i in keep_boxes_list]
-            # total_boxes_nms += boxes_nms
+            # NMS
+            boxes_dyn = np.array(boxes_dyn)
+            keep_boxes_list, nms_boxes_dict = NMS(boxes_dyn, args.nms_threshold)
+            boxes_nms = [list(i) for i in keep_boxes_list]
+            total_boxes_nms += boxes_nms
             
-            # # boxes_nms = np.array(boxes_dyn)
+            # boxes_nms = np.array(boxes_dyn)
             
-            # # NMM
-            # boxes_nms = np.array(boxes_nms)
-            # cluster_boxes_list, nmm_boxes_dict = NMM(boxes_nms, args.nmm_threshold)
-            # total_boxes_nmm += nmm_boxes_dict
+            # NMM
+            boxes_nms = np.array(boxes_nms)
+            cluster_boxes_list, nmm_boxes_dict = NMM(boxes_nms, args.nmm_threshold)
+            total_boxes_nmm += nmm_boxes_dict
             
             # # feature extraction
             # tc_bbox = [c * scale_feature for c in filtered_properties[i].bbox]
@@ -322,8 +324,8 @@ if __name__ == "__main__":
             img.save(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_nmm.png'))
     
     
-    # with open(os.path.join(args.output_path, 'results.json'), 'w') as result_file:
-    #     json.dump(final_boxes_dict, result_file)
-    # with open(os.path.join(args.output_path, 'results_boxes.json'), 'w') as result_file:
-    #     json.dump(dyn_boxes_dict, result_file)
+    with open(os.path.join(args.output_path, 'results.json'), 'w') as result_file:
+        json.dump(final_boxes_dict, result_file)
+    with open(os.path.join(args.output_path, 'results_boxes.json'), 'w') as result_file:
+        json.dump(dyn_boxes_dict, result_file)
     print('Generate total {} patches'.format(np.array([len(i) for i in dyn_boxes_dict.values()]).sum()))

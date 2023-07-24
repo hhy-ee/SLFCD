@@ -169,7 +169,7 @@ def run(args):
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
         np.save(os.path.join(args.probs_path, 'model_prior_l8_l{}'.format(level_ckpt), \
-            'save_roi_th_0.1_min100_max500_edge_fixmodel_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+            'save_roi_th_0.1_min1e0_max5e2_edge_fixmodel_dynsize_batch_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -180,7 +180,7 @@ def run(args):
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_path, 'model_prior_l8_l{}'.format(level_ckpt), \
-            'save_roi_th_0.1_min100_max500_edge_fixmodel_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+            'save_roi_th_0.1_min1e0_max5e2_edge_fixmodel_dynsize_batch_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -194,7 +194,7 @@ def main():
         "./datasets/test/crop_split_l1/results_boxes.json",
         './datasets/test/dens_map_sampling_2s_l5'])
     args.batch_inf = True
-    args.GPU = "2"
+    args.GPU = "1"
     run(args)
 
 

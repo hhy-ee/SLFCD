@@ -30,8 +30,17 @@ class WSIPatchDataset(Dataset):
         self._image_size = tuple([int(i / 2**self._level_ckpt) for i in self._slide.level_dimensions[0]])
         self.first_stage_map, self.dist_from_edge, self.nearest_bg_coord, self.feature_region_conf = self._prior
         
-        self._POI = (self.dist_from_edge == 1)
-        # self._POI = (self.dist_from_edge >= 1)
+        # self._POI = (self.dist_from_edge == 1)
+        
+        # background = ~(self.dist_from_edge >= 1)
+        # dist_from_foreground = nd.distance_transform_edt(background)
+        # self._POI = np.logical_or((self.dist_from_edge == 1), (dist_from_foreground == 1))
+        
+        background = ~(self.dist_from_edge >= 1)
+        dist_from_foreground = nd.distance_transform_edt(background)
+        in_edge = np.logical_and((self.dist_from_edge >= 1), (self.dist_from_edge <= 2))
+        out_edge = np.logical_and((dist_from_foreground >= 1), (dist_from_foreground <= 2))
+        self._POI = np.logical_or(in_edge, out_edge)
         
         self._resolution = 2 ** (self._level_sample - self._level_ckpt)
         self._X_idcs, self._Y_idcs = np.where(self._POI)

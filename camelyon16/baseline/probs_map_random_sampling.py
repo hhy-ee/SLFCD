@@ -144,7 +144,7 @@ def run(args):
     
     time_total = 0.0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
-    for file in sorted(dir)[80:]:
+    for file in sorted(dir)[:40]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
         #                             'save_roi_th_0.1_min1e0_max1e9_whole_fixmodel_l{}'.format(level_save), file)):
         #     continue
@@ -186,7 +186,7 @@ def run(args):
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
         np.save(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-            'save_roi_th_0.1_min1e0_max1e9_whole_fixmodel_l{}'.format(level_save), file), probs_map)
+            'save_roi_th_0.1_min1e0_max5e2_edge1_fixmodel_fixsize_l{}'.format(level_save), file), probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -197,7 +197,7 @@ def run(args):
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
         cv2.imwrite(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-            'save_roi_th_0.1_min1e0_max5e2_edge_fixmodel_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+            'save_roi_th_0.1_min1e0_max5e2_edge1_fixmodel_fixsize_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -209,10 +209,10 @@ def main():
         "./camelyon16/configs/cnn_fix_l1.json",
         './datasets/test/dens_map_sampling_l9/model_l1/save_l3',
         './datasets/test/dens_map_sampling_2s_l5'])
-    args.roi_generator = 'prior_l8'
+    args.roi_generator = 'prior_l9'
     args.roi_threshold = 0.1
     args.itc_threshold = [1e0, 5e2]
-    args.GPU = "1"
+    args.GPU = "0"
     
     run(args)
 
