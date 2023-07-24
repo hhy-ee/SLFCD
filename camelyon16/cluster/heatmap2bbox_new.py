@@ -60,7 +60,7 @@ def parse_args():
     args.nms_threshold = 0.5
     args.nmm_threshold = 0.1
     args.fea_threshold = 0.5
-    args.image_show = False
+    args.image_show = True
     args.label_save = False
     return args
 
@@ -92,6 +92,7 @@ if __name__ == "__main__":
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         prior_shape = tuple([int(i / 2**level_prior) for i in slide.level_dimensions[0]])
         show_shape = tuple([int(i / 2**level_prior) for i in slide.level_dimensions[0]])
+        ext_shape = tuple([int(i / 2**level_output) for i in slide.level_dimensions[0]])
         
         # calculate score of each patches
         first_stage_map = np.load(os.path.join(args.prior_path, 'model_l1/save_l3', file))
@@ -159,8 +160,6 @@ if __name__ == "__main__":
             
         # generate patches from each tumor cell
         distance, coord = nd.distance_transform_edt(filled_mask, return_indices=True)
-        ext_shape = tuple([int(i / 2**level_output) for i in slide.level_dimensions[0]])
-        feature_map = cv2.resize(first_stage_map, (ext_shape[1], ext_shape[0]), interpolation=cv2.INTER_CUBIC) 
         for i in range(len(filtered_properties)):
             boxes_tumor = []
             tc_X = filtered_properties[i].coords[:,0]
@@ -229,66 +228,71 @@ if __name__ == "__main__":
             total_boxes_nmm += nmm_boxes_dict
             
             # # feature extraction
-            # tc_bbox = [c * scale_feature for c in filtered_properties[i].bbox]
-            # tc_w, tc_h = tc_bbox[2] - tc_bbox[0], tc_bbox[3] - tc_bbox[1]
-            # tc_l = int(tc_bbox[0] * slide.level_downsamples[level_output])
-            # tc_t = int(tc_bbox[1] * slide.level_downsamples[level_output])
-            # tc_slide = slide.read_region((tc_l, tc_t), level_output, (tc_w, tc_h))
-            # tc_map = feature_map[tc_bbox[0]:tc_bbox[2], tc_bbox[1]:tc_bbox[3]]
-            # extractor = extractor_features(tc_map, tc_slide)
-            # tc_features = compute_features(extractor, args.fea_threshold)
-            # tc_features.update({'height': tc_h, 'width': tc_w})
-            # nmm_boxes_dict = [tc_features] + nmm_boxes_dict
-            # for j, cluster in enumerate(nmm_boxes_dict[1:]):
-            #     clu_box = cluster['cluster']
-            #     dens_patch = feature_map[clu_box[0]: clu_box[0]+clu_box[2], clu_box[1]: clu_box[1]+clu_box[3]]
-            #     slide_patch = slide.read_region((int(clu_box[0]* slide.level_downsamples[level_output]), \
-            #                                     int(clu_box[1]* slide.level_downsamples[level_output])), \
-            #                                     level_output, (clu_box[2], clu_box[3]))
-            #     # # feature
-            #     extractor = extractor_features(dens_patch, slide_patch)
-            #     features = compute_features(extractor, args.fea_threshold)
-            #     cluster.update(features)
-                
-            #     # plot & save
-            #     if args.image_show:
-            #         img_patch_rgb = np.asarray(slide_patch.convert('RGB')).transpose((1,0,2))
-            #         label_patch_rgb = cv2.applyColorMap(dens_patch, cv2.COLORMAP_JET)
-            #         label_patch_rgb = cv2.cvtColor(label_patch_rgb, cv2.COLOR_BGR2RGB)
-            #         heat_img = cv2.addWeighted(label_patch_rgb, 0.5, img_patch_rgb, 0.5, 0)
-            #         binary_map = (extractor.probs_map_set_p(args.fea_threshold) *255).astype(np.uint8)
-            #         cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_patch.png'), heat_img)
-            #         cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_binary.png'), binary_map)
-            #     if args.label_save:
-            #         np.save(os.path.join(args.output_path, 'cluster_mask', '{}_tc_{}_clu_{}.npy'.\
-            #                             format(os.path.basename(file).split('.')[0], i, j)), dens_patch)
-                    
-            #     for k, child in enumerate(cluster['child']):
-            #         chi_box = child['cluster']
-            #         dens_patch = feature_map[chi_box[0]: chi_box[0]+chi_box[2], chi_box[1]: chi_box[1]+chi_box[3]]
-            #         slide_patch = slide.read_region((int(chi_box[0]* slide.level_downsamples[level_output]), \
-            #                                     int(chi_box[1]* slide.level_downsamples[level_output])), \
-            #                                     level_output, (chi_box[2], chi_box[3])) 
-            #         # # feature
-            #         extractor = extractor_features(dens_patch, slide_patch)
-            #         features = compute_features(extractor, args.fea_threshold)
-            #         child.update(features)
-                
-            #         # plot & save
-            #         if args.image_show:
-            #             img_patch_rgb = np.asarray(slide_patch.convert('RGB')).transpose((1,0,2))
-            #             label_patch_rgb = cv2.applyColorMap(dens_patch, cv2.COLORMAP_JET)
-            #             label_patch_rgb = cv2.cvtColor(label_patch_rgb, cv2.COLOR_BGR2RGB)
-            #             heat_img = cv2.addWeighted(label_patch_rgb, 0.5, img_patch_rgb, 0.5, 0)
-            #             binary_map = (extractor.probs_map_set_p(args.fea_threshold) *255).astype(np.uint8)
-            #             cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_patch.png'), heat_img)
-            #             cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_binary.png'), binary_map)
-            #         if args.label_save: 
-            #             np.save(os.path.join(args.output_path, 'cluster_mask', '{}_tc_{}_clu_{}_chi_{}.npy'.\
-            #                                 format(os.path.basename(file).split('.')[0], i, j, k)), dens_patch)
-
+            feature_map = cv2.resize(first_stage_map, (ext_shape[1], ext_shape[0]), interpolation=cv2.INTER_CUBIC) 
+            tc_bbox = [c * scale_feature for c in filtered_properties[i].bbox]
+            tc_w, tc_h = tc_bbox[2] - tc_bbox[0], tc_bbox[3] - tc_bbox[1]
+            tc_l = int(tc_bbox[0] * slide.level_downsamples[level_output])
+            tc_t = int(tc_bbox[1] * slide.level_downsamples[level_output])
+            tc_slide = slide.read_region((tc_l, tc_t), level_output, (tc_w, tc_h))
+            tc_map = feature_map[tc_bbox[0]: tc_bbox[2], tc_bbox[1]: tc_bbox[3]]
+            extractor = extractor_features(tc_map, tc_slide)
+            tc_features = compute_features(extractor, args.fea_threshold)
+            tc_features.update({'height': tc_h, 'width': tc_w, 'bbox': tc_bbox})
+            nmm_boxes_dict = [tc_features] + nmm_boxes_dict
+            for j, cluster in enumerate(nmm_boxes_dict[1:]):
+                clu_box = cluster['cluster']
+                dens_patch = feature_map[clu_box[0]: clu_box[0]+clu_box[2], clu_box[1]: clu_box[1]+clu_box[3]]
+                slide_patch = slide.read_region((int(clu_box[0]* slide.level_downsamples[level_output]), \
+                                                int(clu_box[1]* slide.level_downsamples[level_output])), \
+                                                level_output, (clu_box[2], clu_box[3]))
+                # # feature
+                extractor = extractor_features(dens_patch, slide_patch)
+                features = compute_features(extractor, args.fea_threshold)
+                cluster.update(features)
+                for k, child in enumerate(cluster['child']):
+                    chi_box = child['cluster']
+                    dens_patch = feature_map[chi_box[0]: chi_box[0]+chi_box[2], chi_box[1]: chi_box[1]+chi_box[3]]
+                    slide_patch = slide.read_region((int(chi_box[0]* slide.level_downsamples[level_output]), \
+                                                int(chi_box[1]* slide.level_downsamples[level_output])), \
+                                                level_output, (chi_box[2], chi_box[3])) 
+                    # # feature
+                    extractor = extractor_features(dens_patch, slide_patch)
+                    features = compute_features(extractor, args.fea_threshold)
+                    child.update(features)
             
-            # final_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): nmm_boxes_dict})
+            final_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): nmm_boxes_dict})
+            
+            if args.label_save:
+                tumor_mask = np.load(os.path.join(os.path.dirname(args.wsi_path), \
+                                                    'tumor_mask_l{}'.format(level_output), file))
+                tc_mask = tumor_mask[tc_bbox[0]: tc_bbox[2], tc_bbox[1]: tc_bbox[3]]
+                np.save(os.path.join(args.output_path, 'cluster_mask', '{}_tc_{}.npy'.\
+                                        format(os.path.basename(file).split('.')[0], i)), tc_mask)
+            
+            # # plot & save
+            # if args.image_show:
+            #     img_patch_rgb = np.asarray(slide_patch.convert('RGB')).transpose((1,0,2))
+            #     label_patch_rgb = cv2.applyColorMap(dens_patch, cv2.COLORMAP_JET)
+            #     label_patch_rgb = cv2.cvtColor(label_patch_rgb, cv2.COLOR_BGR2RGB)
+            #     heat_img = cv2.addWeighted(label_patch_rgb, 0.5, img_patch_rgb, 0.5, 0)
+            #     binary_map = (extractor.probs_map_set_p(args.fea_threshold) *255).astype(np.uint8)
+            #     cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_patch.png'), heat_img)
+            #     cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_binary.png'), binary_map)
+            # if args.label_save:
+            #     np.save(os.path.join(args.output_path, 'cluster_mask', '{}_tc_{}_clu_{}.npy'.\
+            #                         format(os.path.basename(file).split('.')[0], i, j)), dens_patch)
+            # # plot & save
+            # if args.image_show:
+            #     img_patch_rgb = np.asarray(slide_patch.convert('RGB')).transpose((1,0,2))
+            #     label_patch_rgb = cv2.applyColorMap(dens_patch, cv2.COLORMAP_JET)
+            #     label_patch_rgb = cv2.cvtColor(label_patch_rgb, cv2.COLOR_BGR2RGB)
+            #     heat_img = cv2.addWeighted(label_patch_rgb, 0.5, img_patch_rgb, 0.5, 0)
+            #     binary_map = (extractor.probs_map_set_p(args.fea_threshold) *255).astype(np.uint8)
+            #     cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_patch.png'), heat_img)
+            #     cv2.imwrite(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_binary.png'), binary_map)
+            # if args.label_save: 
+            #     np.save(os.path.join(args.output_path, 'cluster_mask', '{}_tc_{}_clu_{}_chi_{}.npy'.\
+            #                         format(os.path.basename(file).split('.')[0], i, j, k)), dens_patch)
         
         if args.image_show:
             img = Image.open(os.path.join(args.prior_path, 'model_l1/save_l3', file.replace('.npy','_heat.png')))
@@ -322,7 +326,6 @@ if __name__ == "__main__":
                                     (clu_box[1]-1+clu_box[3]) * scale_show)), \
                                     fill=None, outline='green', width=1)
             img.save(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_nmm.png'))
-    
     
     with open(os.path.join(args.output_path, 'results.json'), 'w') as result_file:
         json.dump(final_boxes_dict, result_file)
