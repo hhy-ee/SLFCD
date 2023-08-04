@@ -34,12 +34,12 @@ parser.add_argument('cnn_path', default=None, metavar='CNN_PATH', type=str,
                     ' the ckpt file')
 parser.add_argument('probs_map_path', default=None, metavar='PROBS_MAP_PATH',
                     type=str, help='Path to the output probs_map numpy file')
+parser.add_argument('--RGB_min', default=50, type=int, help='min value for RGB'
+                    ' channel, default 50')
 parser.add_argument('--GPU', default='1', type=str, help='which GPU to use'
                     ', default 0')
 parser.add_argument('--num_workers', default=0, type=int, help='number of '
                     'workers to use to make batch, default 5')
-parser.add_argument('--overlap', default=0, type=int, help='whether to'
-                    'use slide window paradigm with overlap.')
 parser.add_argument('--eight_avg', default=0, type=int, help='if using average'
                     ' of the 8 direction predictions for each patch,'
                     ' default 0, which means disabled')
@@ -129,6 +129,7 @@ def run(args):
     model = model.cuda().eval()
     
     time_total = 0.0
+    patch_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
     for file in sorted(dir)[80:]:
         # if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
@@ -136,27 +137,28 @@ def run(args):
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         tissue_shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
         
-        # old tissue
-        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6', file))
-        tissue = transform.resize(tissue, tissue_shape)
-        
+        # tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6', file))
+        # tissue = transform.resize(tissue, tissue_shape)
+
         # new tissue
         rgb_image = slide.read_region((0, 0), level_show,
             tuple([int(i / 2**level_show) for i in slide.level_dimensions[0]]))
         rgb_image = np.array(rgb_image).transpose(1,0,2)
         hsv = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2HSV)
-        lower_red = np.array([20, 20, 20])
-        upper_red = np.array([200, 200, 200])
+        upper_red = np.array([255,]*3)
+        lower_red = np.array([args.RGB_min,]*3)
+        upper_red = upper_red - lower_red
         # mask -> 1 channel
         mask = cv2.inRange(hsv, lower_red, upper_red)
-        tissue = np.logical_or(transform.resize((mask > 127), tissue_shape), tissue)
-    
+        tissue = transform.resize((mask > 127), tissue_shape)
+        
         # calculate heatmap & runtime
         dataloader = make_dataloader(
             args, cnn, slide, tissue, level_sample, level_ckpt, flip='NONE', rotate='NONE')
         probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader)
+        patch_total += dataloader.dataset._idcs_num
         time_total += time_network
-
+        
         # save heatmap
         probs_map = (probs_map * 255).astype(np.uint8)
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
@@ -164,7 +166,7 @@ def run(args):
         np.save(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), \
                                  'save_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
 
-        # visulize heatmap
+        # # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
                             tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
         img_rgb = np.asarray(img_rgb).transpose((1,0,2))
@@ -177,14 +179,23 @@ def run(args):
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
-
+    logging.info('Total Patch Number : {:d}'.format(patch_total))
+    
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_fix_l1",
+        "./save_train/train_fix_nobg_l1",
         "./camelyon16/configs/cnn_fix_l1.json",
-        './datasets/test/dens_map_sampling1_l9'])
+        './datasets/test/dens_map_sampling3_l8'])
+    args.RGB_min = 90
     args.GPU = "2"
+    
+    # args = parser.parse_args([
+    #     "./datasets/test/images",
+    #     "./save_train/train_dyn_l0/pretrain",
+    #     "./camelyon16/configs/cnn_dyn_l0.json",
+    #     './datasets/test/pengjq_test/dens_map_sampling_l9'])
+    # args.GPU = "2"
     
     run(args)
 

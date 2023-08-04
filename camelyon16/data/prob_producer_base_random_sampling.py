@@ -28,19 +28,19 @@ class WSIPatchDataset(Dataset):
 
     def _pre_process(self):
         self._image_size = tuple([int(i / 2**self._level_ckpt) for i in self._slide.level_dimensions[0]])
-        self.first_stage_map, self.dist_from_edge, self.nearest_bg_coord, self.feature_region_conf = self._prior
+        self.first_stage_map, self.dist_from_bg, self.nearest_bg_coord, self.feature_region_conf = self._prior
         
-        # self._POI = (self.dist_from_edge == 1)
+        # self._POI = (self.dist_from_bg == 1)
         
-        # background = ~(self.dist_from_edge >= 1)
-        # dist_from_foreground = nd.distance_transform_edt(background)
-        # self._POI = np.logical_or((self.dist_from_edge == 1), (dist_from_foreground == 1))
+        # background = ~(self.dist_from_bg >= 1)
+        # dist_from_fg = nd.distance_transform_edt(background)
+        # self._POI = np.logical_or((self.dist_from_bg == 1), (dist_from_fg == 1))
         
-        background = ~(self.dist_from_edge >= 1)
-        dist_from_foreground = nd.distance_transform_edt(background)
-        in_edge = np.logical_and((self.dist_from_edge >= 1), (self.dist_from_edge <= 2))
-        out_edge = np.logical_and((dist_from_foreground >= 1), (dist_from_foreground <= 2))
-        self._POI = np.logical_or(in_edge, out_edge)
+        # self._POI = (self.dist_from_bg >= 1)
+
+        background = ~(self.dist_from_bg >= 1)
+        dist_from_fg = nd.distance_transform_edt(background)
+        self._POI = np.logical_or((self.dist_from_bg >= 1), (dist_from_fg == 1))
         
         self._resolution = 2 ** (self._level_sample - self._level_ckpt)
         self._X_idcs, self._Y_idcs = np.where(self._POI)
@@ -56,7 +56,8 @@ class WSIPatchDataset(Dataset):
         y_center = int(y_mask * self._resolution)
 
         patch_size = self._patch_size
-
+        # patch_size = 512
+        
         x = int((x_center - patch_size // 2) * self._slide.level_downsamples[self._level_ckpt])
         y = int((y_center - patch_size // 2) * self._slide.level_downsamples[self._level_ckpt])
         

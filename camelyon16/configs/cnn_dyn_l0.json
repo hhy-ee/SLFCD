@@ -8,8 +8,8 @@
     "normalize": "True",
     "lr": 0.001,
     "momentum": 0.9,
-    "data_path_train": "./datasets/train/patch_gen_dyn_l0",
-    "data_path_valid": "./datasets/train/patch_gen_dyn_l0",
+    "data_path_train": "/media/ps/passport2/hhy/camelyon16/train/patch_gen_dyn_l0",
+    "data_path_valid": "/media/ps/passport2/hhy/camelyon16/train/patch_gen_dyn_l0",
     "epoch": 50,
     "log_every": 5
   }
