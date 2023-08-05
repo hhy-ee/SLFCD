@@ -175,7 +175,7 @@ def run(args):
     for epoch in range(summary_train['epoch'], cnn['epoch']):
         summary_train = train_epoch(summary_train, summary_writer, cnn, 
                                     model, loss_fn, optimizer, dataloader)
-        if epoch >= 0 and epoch % 2 ==0:
+        if epoch >= 0 and epoch % 1 ==0:
             torch.save({'epoch': summary_train['epoch'],
                         'step': summary_train['step'],
                         'state_dict': model.module.state_dict()},
@@ -210,18 +210,19 @@ def run(args):
 def main():
     logging.basicConfig(level=logging.INFO)
 
+    # args = parser.parse_args([
+    #     "./camelyon16/configs/cnn_fix_l1.json",
+    #     "./save_train/train_fix_nobg_l1"])
+    # args.device_ids = '0'
+    # args.init_mode = 'resume'
+    # run(args)
+    
     args = parser.parse_args([
-        "./camelyon16/configs/cnn_fix_l1.json",
-        "./save_train/train_fix_nobg_l1"])
+        "./camelyon16/configs/cnn_dyn_l0.json",
+        "./save_train/train_dyn_l0"])
     args.device_ids = '3'
     args.init_mode = 'resume'
     run(args)
-    # args = parser.parse_args([
-    #     "./camelyon16/configs/cnn_dyn_l0.json",
-    #     "./save_train/train_dyn_l0"])
-    # args.device_ids = '1'
-    # args.init_mode = 'finetune'
-    # run(args)
 
 if __name__ == '__main__':
     main()

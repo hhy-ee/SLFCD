@@ -205,14 +205,21 @@ def main():
     #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l1'])
     # args.GPU = "1"
     
+    # args = parser.parse_args([
+    #     "/media/ps/passport2/hhy/camelyon16/test/images", # wsi_path
+    #     "/home/ps/hhy/slfcd/save_train/train_base_l1/best.ckpt", # ckpt_path
+    #     "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json", # cnn_path
+    #     '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l1']) # probs_map_path
+    # args.GPU = "2"
+    # run(args)
+
     args = parser.parse_args([
         "/media/ps/passport2/hhy/camelyon16/test/images", # wsi_path
-        "/home/ps/hhy/slfcd/save_train/train_base_l1/best.ckpt", # ckpt_path
-        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json", # cnn_path
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_l1']) # probs_map_path
-    args.GPU = "2"
+        "/home/ps/hhy/slfcd/save_train/train_dyn_l0/pretrain/train_e4.ckpt", # ckpt_path
+        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_dyn_l0.json", # cnn_path
+        '/media/ps/passport2/hhy/camelyon16/test/pengjq_test/dens_map_sliding_l0']) # probs_map_path
+    args.GPU = "0"
     run(args)
-
 
 if __name__ == '__main__':
     main()
