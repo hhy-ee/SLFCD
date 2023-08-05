@@ -34,8 +34,8 @@ parser.add_argument('cnn_path', default=None, metavar='CNN_PATH', type=str,
                     ' the ckpt file')
 parser.add_argument('probs_map_path', default=None, metavar='PROBS_MAP_PATH',
                     type=str, help='Path to the output probs_map numpy file')
-parser.add_argument('--RGB_min', default=50, type=int, help='min value for RGB'
-                    ' channel, default 50')
+parser.add_argument('--overlap', default=0, type=int, help='whether to use'
+                    'slide window paradigm with overlap.')
 parser.add_argument('--GPU', default='1', type=str, help='which GPU to use'
                     ', default 0')
 parser.add_argument('--num_workers', default=0, type=int, help='number of '
@@ -104,7 +104,7 @@ def make_dataloader(args, cnn, slide, tissue, level_sample, level_ckpt, flip='NO
     
     dataloader = DataLoader(
         WSIPatchDataset(slide, tissue, level_sample, level_ckpt, 
-                        image_size=cnn['patch_inf_size'],
+                        args, image_size=cnn['patch_inf_size'],
                         normalize=True, flip=flip, rotate=rotate),
         batch_size=batch_size, num_workers=num_workers, drop_last=False)
 
@@ -135,22 +135,13 @@ def run(args):
         # if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
-        tissue_shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
+        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6', file))
         
-        # tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6', file))
-        # tissue = transform.resize(tissue, tissue_shape)
-
-        # new tissue
-        rgb_image = slide.read_region((0, 0), level_show,
-            tuple([int(i / 2**level_show) for i in slide.level_dimensions[0]]))
-        rgb_image = np.array(rgb_image).transpose(1,0,2)
-        hsv = cv2.cvtColor(rgb_image, cv2.COLOR_BGR2HSV)
-        upper_red = np.array([255,]*3)
-        lower_red = np.array([args.RGB_min,]*3)
-        upper_red = upper_red - lower_red
-        # mask -> 1 channel
-        mask = cv2.inRange(hsv, lower_red, upper_red)
-        tissue = transform.resize((mask > 127), tissue_shape)
+        # tissue_shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
+        
+        prior_shape = tuple([int(i / 2**level_ckpt) for i in slide.level_dimensions[0]]) 
+        tissue_shape = tuple([int(i / cnn['patch_inf_size'] / (1 - args.overlap)) for i in prior_shape])
+        tissue = transform.resize(tissue, tissue_shape)
         
         # calculate heatmap & runtime
         dataloader = make_dataloader(
@@ -187,7 +178,7 @@ def main():
         "./save_train/train_fix_nobg_l1",
         "./camelyon16/configs/cnn_fix_l1.json",
         './datasets/test/dens_map_sampling3_l8'])
-    args.RGB_min = 90
+    args.overlap = 0.3
     args.GPU = "2"
     
     # args = parser.parse_args([
