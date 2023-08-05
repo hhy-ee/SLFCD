@@ -55,7 +55,7 @@ def run(args):
 
 def main():
     args = parser.parse_args([
-        "./datasets/train/normal",
+        "./datasets/train/tumor",
         "./datasets/train/tissue_mask_l6"])
     
     run(args)
