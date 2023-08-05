@@ -51,17 +51,17 @@ def parse_args():
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/test/images', 
-                              './datasets/test/dens_map_sampling_l8',
-                              './datasets/test/crop_split_l1'])
+    args = parser.parse_args(['./datasets/train/tumor', 
+                              './datasets/train/dens_map_sampling_l8',
+                              './datasets/train/crop_split_new_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = (1e0, 5e2)
+    args.itc_threshold = (1e0, 2e3)
     args.ini_patchsize = 256
     args.nms_threshold = 0.5
     args.nmm_threshold = 0.1
     args.fea_threshold = 0.5
-    args.image_show = True
-    args.label_save = False
+    args.image_show = False
+    args.label_save = True
     return args
 
 if __name__ == "__main__":
@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
     time_total = 0.0
     level_show = 6
-    level_prior = 5
+    level_prior = 6
     level_input = 3
     level_output = int(args.output_path.split('l')[-1])
 
@@ -82,7 +82,7 @@ if __name__ == "__main__":
     dyn_boxes_dict = {}
     final_boxes_dict ={}
     
-    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
+    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tumor_mask_l6'))
     for file in tqdm(sorted(dir), total=len(dir)):
         # initialization
         filtered_properties = []
@@ -160,6 +160,9 @@ if __name__ == "__main__":
             
         # generate patches from each tumor cell
         distance, coord = nd.distance_transform_edt(filled_mask, return_indices=True)
+        if args.label_save:
+            tumor_mask = np.load(os.path.join(os.path.dirname(args.wsi_path), \
+                                                'tumor_mask_l{}'.format(level_output), file))
         for i in range(len(filtered_properties)):
             boxes_tumor = []
             tc_X = filtered_properties[i].coords[:,0]
@@ -167,7 +170,7 @@ if __name__ == "__main__":
             for idx in range(len(tc_X)):
                 x_center, y_center = tc_X[idx], tc_Y[idx]
                 edge_dist = distance[x_center, y_center]
-                if edge_dist == 1:
+                if edge_dist >= 1:
                     patch_size = args.ini_patchsize // scale_out
                     l = x_center * scale_in - patch_size // 2
                     t = y_center * scale_in - patch_size // 2
@@ -263,8 +266,6 @@ if __name__ == "__main__":
             final_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): nmm_boxes_dict})
             
             if args.label_save:
-                tumor_mask = np.load(os.path.join(os.path.dirname(args.wsi_path), \
-                                                    'tumor_mask_l{}'.format(level_output), file))
                 tc_mask = tumor_mask[tc_bbox[0]: tc_bbox[2], tc_bbox[1]: tc_bbox[3]]
                 np.save(os.path.join(args.output_path, 'cluster_mask', '{}_tc_{}.npy'.\
                                         format(os.path.basename(file).split('.')[0], i)), tc_mask)
@@ -326,7 +327,7 @@ if __name__ == "__main__":
                                     (clu_box[1]-1+clu_box[3]) * scale_show)), \
                                     fill=None, outline='green', width=1)
             img.save(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_nmm.png'))
-    
+
     with open(os.path.join(args.output_path, 'results.json'), 'w') as result_file:
         json.dump(final_boxes_dict, result_file)
     with open(os.path.join(args.output_path, 'results_boxes.json'), 'w') as result_file:
