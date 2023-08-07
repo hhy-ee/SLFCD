@@ -57,11 +57,11 @@ def parse_args():
     args.roi_threshold = 0.1
     args.itc_threshold = (1e0, 2e3)
     args.ini_patchsize = 256
-    args.nms_threshold = 0.5
+    args.nms_threshold = 0.7
     args.nmm_threshold = 0.1
     args.fea_threshold = 0.5
     args.image_show = False
-    args.label_save = True
+    args.label_save = False
     return args
 
 if __name__ == "__main__":
@@ -104,6 +104,8 @@ if __name__ == "__main__":
         
         # Computes the inference mask
         filled_image = nd.morphology.binary_fill_holes(POI)
+        dist_from_fg = nd.distance_transform_edt(~filled_image, return_indices=False)
+        filled_image = np.logical_or(filled_image, (dist_from_fg==1))
         evaluation_mask = measure.label(filled_image, connectivity=2)
         
         # eliminate abnormal tumor cells
@@ -231,44 +233,44 @@ if __name__ == "__main__":
             total_boxes_nmm += nmm_boxes_dict
             
             # # feature extraction
-            feature_map = cv2.resize(first_stage_map, (ext_shape[1], ext_shape[0]), interpolation=cv2.INTER_CUBIC) 
-            tc_bbox = [c * scale_feature for c in filtered_properties[i].bbox]
-            tc_w, tc_h = tc_bbox[2] - tc_bbox[0], tc_bbox[3] - tc_bbox[1]
-            tc_l = int(tc_bbox[0] * slide.level_downsamples[level_output])
-            tc_t = int(tc_bbox[1] * slide.level_downsamples[level_output])
-            tc_slide = slide.read_region((tc_l, tc_t), level_output, (tc_w, tc_h))
-            tc_map = feature_map[tc_bbox[0]: tc_bbox[2], tc_bbox[1]: tc_bbox[3]]
-            extractor = extractor_features(tc_map, tc_slide)
-            tc_features = compute_features(extractor, args.fea_threshold)
-            tc_features.update({'height': tc_h, 'width': tc_w, 'bbox': tc_bbox})
-            nmm_boxes_dict = [tc_features] + nmm_boxes_dict
-            for j, cluster in enumerate(nmm_boxes_dict[1:]):
-                clu_box = cluster['cluster']
-                dens_patch = feature_map[clu_box[0]: clu_box[0]+clu_box[2], clu_box[1]: clu_box[1]+clu_box[3]]
-                slide_patch = slide.read_region((int(clu_box[0]* slide.level_downsamples[level_output]), \
-                                                int(clu_box[1]* slide.level_downsamples[level_output])), \
-                                                level_output, (clu_box[2], clu_box[3]))
-                # # feature
-                extractor = extractor_features(dens_patch, slide_patch)
-                features = compute_features(extractor, args.fea_threshold)
-                cluster.update(features)
-                for k, child in enumerate(cluster['child']):
-                    chi_box = child['cluster']
-                    dens_patch = feature_map[chi_box[0]: chi_box[0]+chi_box[2], chi_box[1]: chi_box[1]+chi_box[3]]
-                    slide_patch = slide.read_region((int(chi_box[0]* slide.level_downsamples[level_output]), \
-                                                int(chi_box[1]* slide.level_downsamples[level_output])), \
-                                                level_output, (chi_box[2], chi_box[3])) 
-                    # # feature
-                    extractor = extractor_features(dens_patch, slide_patch)
-                    features = compute_features(extractor, args.fea_threshold)
-                    child.update(features)
+            # feature_map = cv2.resize(first_stage_map, (ext_shape[1], ext_shape[0]), interpolation=cv2.INTER_CUBIC) 
+            # tc_bbox = [c * scale_feature for c in filtered_properties[i].bbox]
+            # tc_w, tc_h = tc_bbox[2] - tc_bbox[0], tc_bbox[3] - tc_bbox[1]
+            # tc_l = int(tc_bbox[0] * slide.level_downsamples[level_output])
+            # tc_t = int(tc_bbox[1] * slide.level_downsamples[level_output])
+            # tc_slide = slide.read_region((tc_l, tc_t), level_output, (tc_w, tc_h))
+            # tc_map = feature_map[tc_bbox[0]: tc_bbox[2], tc_bbox[1]: tc_bbox[3]]
+            # extractor = extractor_features(tc_map, tc_slide)
+            # tc_features = compute_features(extractor, args.fea_threshold)
+            # tc_features.update({'height': tc_h, 'width': tc_w, 'bbox': tc_bbox})
+            # nmm_boxes_dict = [tc_features] + nmm_boxes_dict
+            # for j, cluster in enumerate(nmm_boxes_dict[1:]):
+            #     clu_box = cluster['cluster']
+            #     dens_patch = feature_map[clu_box[0]: clu_box[0]+clu_box[2], clu_box[1]: clu_box[1]+clu_box[3]]
+            #     slide_patch = slide.read_region((int(clu_box[0]* slide.level_downsamples[level_output]), \
+            #                                     int(clu_box[1]* slide.level_downsamples[level_output])), \
+            #                                     level_output, (clu_box[2], clu_box[3]))
+            #     # # feature
+            #     extractor = extractor_features(dens_patch, slide_patch)
+            #     features = compute_features(extractor, args.fea_threshold)
+            #     cluster.update(features)
+            #     for k, child in enumerate(cluster['child']):
+            #         chi_box = child['cluster']
+            #         dens_patch = feature_map[chi_box[0]: chi_box[0]+chi_box[2], chi_box[1]: chi_box[1]+chi_box[3]]
+            #         slide_patch = slide.read_region((int(chi_box[0]* slide.level_downsamples[level_output]), \
+            #                                     int(chi_box[1]* slide.level_downsamples[level_output])), \
+            #                                     level_output, (chi_box[2], chi_box[3])) 
+            #         # # feature
+            #         extractor = extractor_features(dens_patch, slide_patch)
+            #         features = compute_features(extractor, args.fea_threshold)
+            #         child.update(features)
             
-            final_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): nmm_boxes_dict})
+            # final_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): nmm_boxes_dict})
             
-            if args.label_save:
-                tc_mask = tumor_mask[tc_bbox[0]: tc_bbox[2], tc_bbox[1]: tc_bbox[3]]
-                np.save(os.path.join(args.output_path, 'cluster_mask', '{}_tc_{}.npy'.\
-                                        format(os.path.basename(file).split('.')[0], i)), tc_mask)
+            # if args.label_save:
+            #     tc_mask = tumor_mask[tc_bbox[0]: tc_bbox[2], tc_bbox[1]: tc_bbox[3]]
+            #     np.save(os.path.join(args.output_path, 'cluster_mask', '{}_tc_{}.npy'.\
+            #                             format(os.path.basename(file).split('.')[0], i)), tc_mask)
             
             # # plot & save
             # if args.image_show:
