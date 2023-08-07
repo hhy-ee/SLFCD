@@ -1,10 +1,8 @@
 {
   "model": "segmentation",
   "batch_size": 10,
-  "image_size": 256,
+  "image_size": 768,
   "crop_size": 256,
-  "patch_inf_size": 768,
-  "batch_inf_size": 20,
   "normalize": "True",
   "lr": 0.001,
   "momentum": 0.9,

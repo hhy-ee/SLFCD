@@ -98,13 +98,13 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader):
     return probs_map, time_total
 
 
-def make_dataloader(args, cnn, slide, tissue, level_sample, level_ckpt, flip='NONE', rotate='NONE'):
-    batch_size = cnn['batch_inf_size']
+def make_dataloader(args, cnn, slide, tissue, scale, level_tissue, level_ckpt, flip='NONE', rotate='NONE'):
+    batch_size = cnn['batch_size']
     num_workers = args.num_workers
     
     dataloader = DataLoader(
-        WSIPatchDataset(slide, tissue, level_sample, level_ckpt, 
-                        args, image_size=cnn['patch_inf_size'],
+        WSIPatchDataset(slide, tissue, scale, level_tissue, level_ckpt, 
+                        args, image_size=cnn['image_size'],
                         normalize=True, flip=flip, rotate=rotate),
         batch_size=batch_size, num_workers=num_workers, drop_last=False)
 
@@ -115,6 +115,7 @@ def run(args):
     # configuration
     level_save = 3
     level_show = 6
+    level_tissue = 5
     level_sample = int(args.probs_map_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
 
@@ -130,22 +131,28 @@ def run(args):
     
     time_total = 0.0
     patch_total = 0
-    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
+    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_tissue)))
     for file in sorted(dir)[80:]:
         # if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
-        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6', file))
+        tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_tissue), file))
         
-        # tissue_shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
+        tissue_shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
         
-        prior_shape = tuple([int(i / 2**level_ckpt) for i in slide.level_dimensions[0]]) 
-        tissue_shape = tuple([int(i / cnn['patch_inf_size'] / (1 - args.overlap)) for i in prior_shape])
-        tissue = transform.resize(tissue, tissue_shape)
+        tissue_shape = tuple([int(np.ceil(i / 2**level_ckpt / int(cnn['image_size'] * (1 - args.overlap)))) for i in slide.level_dimensions[0]])
+        prior_shape = tuple([int(i * int(cnn['image_size'] * (1 - args.overlap))) for i in tissue_shape])
+        prior_shape = tuple([int(i / 2**(level_tissue - level_ckpt)) for i in prior_shape])
+        tissue_prior = np.pad(tissue, ((0, prior_shape[0]-tissue.shape[0]), (0, prior_shape[1]-tissue.shape[1])))
+        tissue_prior = transform.resize(tissue_prior, tissue_shape)
+        if prior_shape[0] % tissue_shape[0] == 0 and prior_shape[1] % tissue_shape[1] ==0:
+            scale = (int(prior_shape[0] / tissue_shape[0]), int(prior_shape[1] / tissue_shape[1]))
+        else:
+            raise Exception("Please reset the overlap for sliding windows. ")
         
         # calculate heatmap & runtime
         dataloader = make_dataloader(
-            args, cnn, slide, tissue, level_sample, level_ckpt, flip='NONE', rotate='NONE')
+            args, cnn, slide, tissue_prior, scale, level_tissue, level_ckpt, flip='NONE', rotate='NONE')
         probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader)
         patch_total += dataloader.dataset._idcs_num
         time_total += time_network
@@ -177,9 +184,9 @@ def main():
         "./datasets/test/images",
         "./save_train/train_fix_nobg_l1",
         "./camelyon16/configs/cnn_fix_l1.json",
-        './datasets/test/dens_map_sampling3_l8'])
-    args.overlap = 0.3
-    args.GPU = "2"
+        './datasets/test/dens_map_sampling1_l8'])
+    args.overlap = 5/16
+    args.GPU = "1"
     
     # args = parser.parse_args([
     #     "./datasets/test/images",

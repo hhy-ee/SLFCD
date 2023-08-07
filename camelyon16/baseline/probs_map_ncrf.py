@@ -90,11 +90,11 @@ def get_probs_map(model, dataloader):
 
 
 def make_dataloader(args, cnn, slide, tissue, flip='NONE', rotate='NONE'):
-    batch_size = cnn['batch_inf_size']
+    batch_size = cnn['batch_size']
     num_workers = args.num_workers
     
     dataloader = DataLoader(
-        WSIPatchDataset(slide, tissue, image_size=cnn['patch_inf_size'],
+        WSIPatchDataset(slide, tissue, image_size=cnn['image_size'],
                         normalize=True, flip=flip, rotate=rotate),
         batch_size=batch_size, num_workers=num_workers, drop_last=False)
 
@@ -112,7 +112,7 @@ def run(args):
     with open(args.cnn_path) as f:
         cnn = json.load(f)
     ckpt = torch.load(args.ckpt_path)
-    model = MODELS['resnet18'](num_nodes=(cnn['patch_inf_size']//256)**2, use_crf='ncrf' in args.probs_map_path)
+    model = MODELS['resnet18'](num_nodes=(cnn['image_size']//256)**2, use_crf='ncrf' in args.probs_map_path)
     model.load_state_dict(ckpt['state_dict'])
     model = model.cuda().eval()
 

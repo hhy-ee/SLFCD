@@ -112,12 +112,12 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
 
 
 def make_dataloader(args, cnn, slide, level_ckpt, assign, flip='NONE', rotate='NONE'):
-    batch_size = cnn['batch_inf_size']
+    batch_size = cnn['batch_size']
     num_workers = args.num_workers
 
     dataloader = DataLoader(
         WSIPatchDataset(slide, level_ckpt, assign, args,
-                        image_size=cnn['patch_inf_size'],
+                        image_size=cnn['image_size'],
                         normalize=True, flip=flip, rotate=rotate),
         batch_size=batch_size, num_workers=num_workers, drop_last=False)
 

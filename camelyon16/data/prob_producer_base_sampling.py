@@ -12,11 +12,12 @@ from torch.utils.data import Dataset
 
 class WSIPatchDataset(Dataset):
 
-    def __init__(self, slide, prior, level_sample, level_ckpt, args,
+    def __init__(self, slide, prior, scale, level_tissue, level_ckpt, args,
                  image_size=256, normalize=True, flip='NONE', rotate='NONE'):
         self._slide = slide
         self._prior = prior
-        self._level_sample = level_sample
+        self._scale = scale
+        self._level_tissue = level_tissue
         self._level_ckpt = level_ckpt
         self.args = args
         self._patch_size = image_size
@@ -27,9 +28,8 @@ class WSIPatchDataset(Dataset):
 
     def _pre_process(self):
         self._image_size = tuple([int(i / 2**self._level_ckpt) for i in self._slide.level_dimensions[0]])
+        self._resolution = tuple([i * 2** (self._level_tissue - self._level_ckpt) for i in self._scale])
         self._POI = self._prior
-        # self._resolution = 2 ** (self._level_sample - self._level_ckpt)
-        self._resolution = self._patch_size * (1 - self.args.overlap)
         self._X_idcs, self._Y_idcs = np.where(self._POI)
         self._idcs_num = len(self._X_idcs)
 
@@ -39,8 +39,8 @@ class WSIPatchDataset(Dataset):
     def __getitem__(self, idx):
         x_mask, y_mask = self._X_idcs[idx], self._Y_idcs[idx]
 
-        x_center = int(x_mask * self._resolution)
-        y_center = int(y_mask * self._resolution)
+        x_center = int(x_mask * self._resolution[0])
+        y_center = int(y_mask * self._resolution[1])
 
         patch_size = self._patch_size
 

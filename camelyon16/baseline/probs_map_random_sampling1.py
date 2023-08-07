@@ -38,13 +38,11 @@ parser.add_argument('prior_path', default=None, metavar='PRIOR_MAP_PATH',
                     type=str, help='Path to the result of first stage numpy file')
 parser.add_argument('probs_path', default=None, metavar='PROBS_MAP_PATH',
                     type=str, help='Path to the output probs_map numpy file')
-parser.add_argument('--roi_generator', default='sampling_l8', metavar='ROI_GENERATOR',
-                    type=str, help='type of the generator of the first stage')
-parser.add_argument('--roi_threshold', default=0.1, metavar='ROI_GENERATOR',
+parser.add_argument('--roi_threshold', default=0.1, metavar='ROI_THRESHOLD',
                     type=float, help='threshold of the generator of the first stage')
-parser.add_argument('--itc_threshold', default=100, metavar='ITC_THRESHOLD',
+parser.add_argument('--itc_threshold', default=[1e0, 5e2], metavar='ITC_THRESHOLD',
                     type=float, help='threshold of the long axis of isolated tumor')
-parser.add_argument('--GPU', default='1', type=str, help='which GPU to use'
+parser.add_argument('--GPU', default='0', type=str, help='which GPU to use'
                     ', default 0')
 parser.add_argument('--num_workers', default=0, type=int, help='number of '
                     'workers to use to make batch, default 5')
@@ -67,31 +65,32 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
     shape = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
     resolution = 2 ** (level_save - level_ckpt)
     if prior is not None:
-        probs_map = cv2.resize(prior, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC) / 255
+        probs_map = prior / 255
         counter = np.ones(shape)
     else:
         probs_map = np.zeros(shape)
         counter = np.zeros(shape)
-    
+
     num_batch = len(dataloader)
 
     count = 0
     time_now = time.time()
     time_total = 0.
+    
     with torch.no_grad():
-        for (data, rect, shape) in dataloader:
+        for (data, rect, box) in dataloader:
             data = Variable(data.cuda(non_blocking=True))
             output = model(data)
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
 
             rect = [(item / resolution).to(torch.int) for item in rect]
-            shape = [(item / resolution).to(torch.int) for item in shape]
+            box = [(item / resolution).to(torch.int) for item in box]
             for bs in range(probs.shape[0]):
-                l, t, r, b = rect[0][bs], rect[1][bs], rect[2][bs], rect[3][bs]
-                r_l, r_t, r_r, r_b = shape[0][bs], shape[1][bs], shape[2][bs], shape[3][bs]
-                prob = transform.resize(probs[bs, 0], (r_r - r_l, r_b - r_t))
-                counter[l: r, t: b] += 1
-                probs_map[l: r, t: b] += prob
+                left, top, right, bot = rect[0][bs], rect[1][bs], rect[2][bs], rect[3][bs]
+                l, t, r, b, s = box[0][bs], box[1][bs], box[2][bs], box[3][bs], box[4][bs]
+                prob = transform.resize(probs[bs, 0], (s, s))
+                counter[left: right, top: bot] += 1
+                probs_map[left: right, top: bot] += prob[l: r, t: b]
 
             count += 1
             time_spent = time.time() - time_now
@@ -111,19 +110,18 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
     return probs_map, time_total
 
 
-def make_dataloader(args, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE'):
-    batch_size = cnn['batch_inf_size']
+def make_dataloader(args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE'):
+    batch_size = cnn['batch_size']
     num_workers = args.num_workers
-    
+
     dataloader = DataLoader(
-        WSIPatchDataset(slide, prior, level_sample, level_ckpt, 
-                        image_size=cnn['patch_inf_size'],
+        WSIPatchDataset(slide, prior, level_sample, level_ckpt, args, file,
+                        image_size=cnn['image_size'],
                         normalize=True, flip=flip, rotate=rotate),
         batch_size=batch_size, num_workers=num_workers, drop_last=False)
 
     return dataloader
 
-# 34.89
 
 def run(args):
     # configuration
@@ -132,9 +130,11 @@ def run(args):
     level_sample = int(args.probs_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
 
+    overlap = os.path.basename(args.prior_path).split('_')[-2].split('o')[-1]
+        
     os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
     logging.basicConfig(level=logging.INFO)
-        
+
     with open(args.cnn_path) as f:
         cnn = json.load(f)
     ckpt = torch.load(os.path.join(args.ckpt_path, 'best.ckpt'))
@@ -143,48 +143,53 @@ def run(args):
     model = model.cuda().eval()
     
     time_total = 0.0
-    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_sample)))
-    for file in sorted(dir)[:20]:
-        # if os.path.exists(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-        #                     'save_random_l{}'.format(level_save), file)):
+    patch_total = 0
+    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
+    for file in sorted(dir)[80:]:
+        # if os.path.exists(os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
+        #           'save_roi_th_0.01_itc_th_1e0_5e2_edge_fixmodel_fixsize1x256_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         
         # compute Point of Interest (POI)
         first_stage_map = np.load(os.path.join(args.prior_path, file))
         shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
-        first_stage_map = cv2.resize(first_stage_map, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC)
-        POI = (first_stage_map / 255) > args.roi_threshold
+        prior_map = cv2.resize(first_stage_map, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC)
+        POI = (prior_map / 255) > args.roi_threshold
         # Computes the inference mask
         filled_image = nd.morphology.binary_fill_holes(POI)
         evaluation_mask = measure.label(filled_image, connectivity=2)
-        # eliminate ITC
+        # eliminate large TC
         max_label = np.amax(evaluation_mask)
         properties = measure.regionprops(evaluation_mask)
-        filled_mask = np.zeros(first_stage_map.shape) > 0
-        threshold = args.itc_threshold / (0.243 * pow(2, level_sample))
+        filled_mask = np.zeros(filled_image.shape) > 0
+        feature_map = np.zeros(filled_image.shape).astype(np.uint8)
+        threshold = tuple([t / (0.243 * pow(2, level_sample)) for t in args.itc_threshold])
         for i in range(0, max_label):
-            if properties[i].major_axis_length > threshold:
+            if properties[i].major_axis_length > threshold[0] and properties[i].major_axis_length < threshold[1]:
                 l, t, r, b = properties[i].bbox
                 filled_mask[l: r, t: b] = np.logical_or(filled_mask[l: r, t: b], properties[i].image_filled)
-        first_stage_map = first_stage_map * filled_mask
+                region_confidence = first_stage_map[properties[i].coords[:,0], properties[i].coords[:,1]].mean()
+                feature_map[properties[i].coords[:,0], properties[i].coords[:,1]] = region_confidence
+        
         # generate distance map
-        POI = (first_stage_map / 255) > args.roi_threshold
-        distance, coord = nd.distance_transform_edt(POI, return_indices=True)
-        prior = (first_stage_map, distance, coord)
+        distance, coord = nd.distance_transform_edt(filled_mask, return_indices=True)
+        prior = (prior_map, distance, coord, feature_map)
 
         # calculate heatmap & runtime
         dataloader = make_dataloader(
-            args, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
+            args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
         probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
+        patch_total += dataloader.dataset._idcs_num
         time_total += time_network
 
         # save heatmap
         probs_map = (probs_map * 255).astype(np.uint8)
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
-        np.save(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                 'save_roitt_0.1_min_100_edge_1_dyn0_size_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+        np.save(os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
+                'save_roi_th_0.1_itc_th_1e0_5e2_contour_fixmodel_fixsize1x256_l{}'.format(level_save), file), \
+                probs_map)
 
         # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -194,22 +199,25 @@ def run(args):
         probs_img_rgb = cv2.applyColorMap(probs_map, cv2.COLORMAP_JET)
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
-        cv2.imwrite(os.path.join(args.probs_path, 'model_{}_l{}'.format(args.roi_generator, level_ckpt), \
-                                   'save_roitt_0.1_min_100_edge_1_dyn0_size_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+        cv2.imwrite(os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
+                    'save_roi_th_0.1_itc_th_1e0_5e2_contour_fixmodel_fixsize1x256_l{}'.format(level_save), \
+                    file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
-    logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
-
+    logging.info('AVG Run Time : {:.2f}'.format(time_total_avg))
+    logging.info('Total Patch Number : {:d}'.format(patch_total))
+    logging.info('AVG Patch Number : {:2f}'.format(patch_total / len(dir)))
+    
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_base_l1",
-        "./camelyon16/configs/cnn_base_l1.json",
-        './datasets/test/dens_map_sampling_l8/model_l1/save_l3',
+        "./save_train/train_fix_nobg_l1",
+        "./camelyon16/configs/cnn_fix_l1.json",
+        './datasets/test/prior_map_sampling_o0.25_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
-    args.roi_generator = 'distance'
     args.roi_threshold = 0.1
-    args.GPU = "0"
+    args.itc_threshold = [1e0, 5e2]
+    args.GPU = "2"
     
     run(args)
 
