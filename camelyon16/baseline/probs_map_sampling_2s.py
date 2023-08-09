@@ -114,7 +114,7 @@ def run(args):
     # configuration
     level_save = 3
     level_show = 6
-    level_sample = 6
+    level_sample = int(args.probs_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
@@ -174,7 +174,7 @@ def main():
         "/home/ps/hhy/slfcd/save_train/train_base_l1",
         "/home/ps/hhy/slfcd/camelyon16/configs/cnn_base_l1.json",
         '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_l8/model_l1/save_l3/',
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s'])
+        '/media/ps/passport2/hhy/camelyon16/test/dens_map_sampling_2s_l6'])
     args.roi_generator = 'sampling_l8'
     args.roi_threshold = 0.1
     args.GPU = "0"

@@ -32,7 +32,7 @@ parser.add_argument('ckpt_path', default=None, metavar='CKPT_PATH', type=str,
 parser.add_argument('cnn_path', default=None, metavar='CNN_PATH', type=str,
                     help='Path to the config file in json format related to'
                     ' the ckpt file')
-parser.add_argument('probs_map_path', default=None, metavar='PROBS_MAP_PATH',
+parser.add_argument('probs_path', default=None, metavar='PROBS_PATH',
                     type=str, help='Path to the output probs_map numpy file')
 parser.add_argument('--overlap', default=0, type=int, help='whether to use'
                     'slide window paradigm with overlap.')
@@ -116,7 +116,7 @@ def run(args):
     level_save = 3
     level_show = 6
     level_tissue = 6
-    level_sample = int(args.probs_map_path.split('l')[-1])
+    level_sample = int(args.probs_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
@@ -133,7 +133,7 @@ def run(args):
     patch_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_tissue)))
     for file in sorted(dir)[80:]:
-        # if os.path.exists(os.path.join(args.probs_map_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
+        # if os.path.exists(os.path.join(args.probs_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_tissue), file))
@@ -161,7 +161,7 @@ def run(args):
         probs_map = (probs_map * 255).astype(np.uint8)
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
-        np.save(os.path.join(args.probs_map_path, file.split('.')[0] + '.npy'), probs_map)
+        np.save(os.path.join(args.probs_path, file.split('.')[0] + '.npy'), probs_map)
 
         # # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -171,7 +171,7 @@ def run(args):
         probs_img_rgb = cv2.applyColorMap(probs_map, cv2.COLORMAP_JET)
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
-        cv2.imwrite(os.path.join(args.probs_map_path, file.split('.')[0] + '_heat.png'), heat_img)
+        cv2.imwrite(os.path.join(args.probs_path, file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))

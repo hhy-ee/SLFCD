@@ -130,7 +130,7 @@ def run(args):
     # configuration
     level_save = 3
     level_show = 6
-    level_sample = 5
+    level_sample = int(args.probs_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
     overlap = os.path.basename(args.prior_path).split('_')[-2].split('o')[-1]
     
@@ -218,12 +218,12 @@ def main():
         "./save_train/train_fix_l1",
         "./camelyon16/configs/cnn_fix_l1.json",
         './datasets/test/prior_map_sampling_o0.25_l1',
-        './datasets/test/dens_map_sampling_2s'])
+        './datasets/test/dens_map_sampling_2s_l6'])
     args.roi_threshold = 0.1
     args.itc_threshold = '1e0_5e2'
     args.canvas_size = 800
     args.patch_size = 256
-    args.sample_type = 'edge'
+    args.sample_type = 'bilateral'
     args.GPU = "3"
     run(args)
 

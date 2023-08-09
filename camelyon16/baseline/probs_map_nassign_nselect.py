@@ -192,7 +192,7 @@ def main():
         "./camelyon16/configs/cnn_fix_l1.json",
         './datasets/test/dens_map_sampling_l8/model_l1/save_l3',
         "./datasets/test/crop_split_l1/results_boxes.json",
-        './datasets/test/dens_map_sampling_2s_l5'])
+        './datasets/test/dens_map_sampling_2s_l6'])
     args.batch_inf = True
     args.GPU = "1"
     run(args)
