@@ -179,20 +179,12 @@ def run(args):
     
 def main():
     args = parser.parse_args([
-        "./datasets/test/images",
-        "./save_train/train_dyn_nobg_l1",
-        "./camelyon16/configs/cnn_dyn_l1.json",
-        './datasets/test/prior_map_sampling_dyn_nobg_o0.25_l1'])
-    args.overlap = 0.25
-    args.GPU = "3"
-    
-    # args = parser.parse_args([
-    #     "./datasets/test/images",
-    #     "./save_train/train_dyn_l0/pretrain",
-    #     "./camelyon16/configs/cnn_dyn_l0.json",
-    #     './datasets/test/pengjq_test/dens_map_sampling_l9'])
-    # args.GPU = "2"
-    
+        "./datasets/train/tumor",
+        "./save_train/train_fix_l1",
+        "./camelyon16/configs/cnn_fix_l1.json",
+        './datasets/train/prior_map_sampling_o0.5_l1'])
+    args.overlap = 0.5
+    args.GPU = "0"
     run(args)
 
 
