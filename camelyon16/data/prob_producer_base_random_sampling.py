@@ -30,17 +30,18 @@ class WSIPatchDataset(Dataset):
         self._image_size = tuple([int(i / 2**self._level_ckpt) for i in self._slide.level_dimensions[0]])
         self.first_stage_map, self.dist_from_bg, self.nearest_bg_coord, self.feature_region_conf = self._prior
         
-        # self._POI = (self.dist_from_bg == 1)
+        # edge
+        self._POI = (self.dist_from_bg == 1)
         
+        # bilateral
         # background = ~(self.dist_from_bg >= 1)
         # dist_from_fg = nd.distance_transform_edt(background)
         # self._POI = np.logical_or((self.dist_from_bg == 1), (dist_from_fg == 1))
-        
-        # self._POI = (self.dist_from_bg >= 1)
 
-        background = ~(self.dist_from_bg >= 1)
-        dist_from_fg = nd.distance_transform_edt(background)
-        self._POI = np.logical_or((self.dist_from_bg >= 1), (dist_from_fg == 1))
+        # whole
+        # background = ~(self.dist_from_bg >= 1)
+        # dist_from_fg = nd.distance_transform_edt(background)
+        # self._POI = np.logical_or((self.dist_from_bg >= 1), (dist_from_fg == 1))
         
         self._resolution = 2 ** (self._level_sample - self._level_ckpt)
         self._X_idcs, self._Y_idcs = np.where(self._POI)
@@ -56,7 +57,7 @@ class WSIPatchDataset(Dataset):
         y_center = int(y_mask * self._resolution)
 
         patch_size = self._patch_size
-        # patch_size = 512
+        # patch_size = 800
         
         x = int((x_center - patch_size // 2) * self._slide.level_downsamples[self._level_ckpt])
         y = int((y_center - patch_size // 2) * self._slide.level_downsamples[self._level_ckpt])
@@ -93,4 +94,3 @@ class WSIPatchDataset(Dataset):
         t = top - (y_center - patch_size // 2)
         b = patch_size + bot - (y_center + patch_size // 2)
         return (img, (left, top, right, bot), (l, t, r, b, patch_size))
-        

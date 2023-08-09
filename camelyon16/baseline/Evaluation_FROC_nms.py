@@ -225,10 +225,10 @@ def plotFROC(total_FPs, total_sensitivity):
 if __name__ == "__main__":
     
     # configuration
-    wsi_folder = './datasets/test/images'
-    mask_folder = './datasets/test/tumor_mask_l5'
-    result_folder = './datasets/test/dens_map_sampling3_l8/model_l1/save_l3'
-    # result_folder = './datasets/test/dens_map_sampling_2s_l6/model_prior_l9_l1/save_roi_th_0.01_min1e0_max5e2_edge_fixmodel_fixsize1x256_l3'
+    wsi_folder = 'datasets/test/images'
+    mask_folder = 'datasets/test/tumor_mask_l5'
+    # result_folder = 'datasets/test/prior_map_sampling_dyn_nobg_o0.25_l1'
+    result_folder = 'datasets/test/dens_map_sampling_2s/model_prior_o0.25_l1/save_roi_th_0.1_itc_th_1e0_5e2_canvas_800_patch_800_edge_fixmodel_fixsize_l3'
     threshold = 0.5
     
     # default setting
@@ -281,7 +281,7 @@ if __name__ == "__main__":
 
         # # plot
         # s = 2 ** (EVALUATION_MASK_LEVEL - PREDICT_MASK_LEVEL)
-        # result_folder_2s = './datasets/test/dens_map_sampling_2s_l6/model_distance_l1/save_roi_th_0.1_min_100_max_500_fix_size_256_non_holes_l3'
+        # result_folder_2s = './datasets/test/dens_map_sampling_2s/model_distance_l1/save_roi_th_0.1_min_100_max_500_fix_size_256_non_holes_l3'
         # img_heat = cv2.imread(os.path.join(result_folder, case.split('.')[0]+'_heat.png'))
         # result_mask = np.load(os.path.join(result_folder_2s, case))
         # result_mask = cv2.resize(result_mask.astype(np.uint8), (scale[1], scale[0]), interpolation=cv2.INTER_CUBIC)

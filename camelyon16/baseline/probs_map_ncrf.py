@@ -149,18 +149,11 @@ def run(args):
 
 def main():  
     args = parser.parse_args([
-        "/media/ps/passport2/hhy/camelyon16/test/images",
-        "/home/ps/hhy/slfcd/save_train/train_ncrf/resnet18_ncrf.ckpt",
-        "/home/ps/hhy/slfcd/camelyon16/configs/cnn_ncrf.json",
-        '/media/ps/passport2/hhy/camelyon16/test/dens_map_ncrf_l6'])
-    args.GPU = "2"
-    
-    # args = parser.parse_args([
-    #     "/media/hy/hhy_data/camelyon16/train/tumor",
-    #     "/media/ruiq/Data/hhy/SLFCD/save_train/train_ncrf/resnet18_base.ckpt",
-    #     "/media/ruiq/Data/hhy/SLFCD/camelyon16/configs/cnn_ncrf.json",
-    #     '/media/hy/hhy_data/camelyon16/train/dens_map_ncrf_l5'])
-    # args.GPU = "1"
+        "./datasets/test/images",
+        "./save_train/train_ncrf/resnet18_ncrf.ckpt",
+        "./camelyon16/configs/cnn_ncrf.json",
+        './datasets/test/dens_map_ncrf_l6'])
+    args.GPU = "3"
     
     run(args)
 

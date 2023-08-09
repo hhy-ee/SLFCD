@@ -115,7 +115,7 @@ def run(args):
     # configuration
     level_save = 3
     level_show = 6
-    level_tissue = 5
+    level_tissue = 6
     level_sample = int(args.probs_map_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
 
@@ -148,7 +148,7 @@ def run(args):
         if prior_shape[0] % tissue_shape[0] == 0 and prior_shape[1] % tissue_shape[1] ==0:
             scale = (int(prior_shape[0] / tissue_shape[0]), int(prior_shape[1] / tissue_shape[1]))
         else:
-            raise Exception("Please reset the overlap for sliding windows. ")
+            raise Exception("Please reset the overlap for sliding windows.")
         
         # calculate heatmap & runtime
         dataloader = make_dataloader(
@@ -161,8 +161,7 @@ def run(args):
         probs_map = (probs_map * 255).astype(np.uint8)
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
         probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
-        np.save(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), \
-                                 'save_l{}'.format(level_save), file.split('.')[0] + '.npy'), probs_map)
+        np.save(os.path.join(args.probs_map_path, file.split('.')[0] + '.npy'), probs_map)
 
         # # visulize heatmap
         img_rgb = slide.read_region((0, 0), level_show, \
@@ -172,8 +171,7 @@ def run(args):
         probs_img_rgb = cv2.applyColorMap(probs_map, cv2.COLORMAP_JET)
         probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
         heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
-        cv2.imwrite(os.path.join(args.probs_map_path, 'model_l{}'.format(level_ckpt), \
-                                   'save_l{}'.format(level_save), file.split('.')[0] + '_heat.png'), heat_img)
+        cv2.imwrite(os.path.join(args.probs_map_path, file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Total Run Time : {:.2f}'.format(time_total_avg))
@@ -182,11 +180,11 @@ def run(args):
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_fix_nobg_l1",
-        "./camelyon16/configs/cnn_fix_l1.json",
-        './datasets/test/dens_map_sampling1_l8'])
-    args.overlap = 5/16
-    args.GPU = "1"
+        "./save_train/train_dyn_nobg_l1",
+        "./camelyon16/configs/cnn_dyn_l1.json",
+        './datasets/test/prior_map_sampling_dyn_nobg_o0.25_l1'])
+    args.overlap = 0.25
+    args.GPU = "3"
     
     # args = parser.parse_args([
     #     "./datasets/test/images",

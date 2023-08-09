@@ -212,7 +212,7 @@ def main():
 
     # args = parser.parse_args([
     #     "./camelyon16/configs/cnn_fix_l1.json",
-    #     "./save_train/train_fix_nobg_l1"])
+    #     "./save_train/train_fix_l1"])
     # args.device_ids = '0'
     # args.init_mode = 'resume'
     # run(args)
