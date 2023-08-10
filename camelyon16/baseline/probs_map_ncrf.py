@@ -20,7 +20,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 torch.manual_seed(0)
 torch.cuda.manual_seed_all(0)
 
-from camelyon16.data.prob_producer_base_ncrf import WSIPatchDataset  # noqa
+from camelyon16.data.prob_producer_ncrf import WSIPatchDataset  # noqa
 from camelyon16.models.ncrf_model import MODELS
 
 

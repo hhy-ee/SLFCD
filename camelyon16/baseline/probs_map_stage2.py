@@ -22,7 +22,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 torch.manual_seed(0)
 torch.cuda.manual_seed_all(0)
 
-from camelyon16.data.prob_producer_base_random_sampling1 import WSIPatchDataset  # noqa
+from camelyon16.data.prob_producer_stage2 import WSIPatchDataset  # noqa
 
 
 parser = argparse.ArgumentParser(description='Get the probability map of tumor'
@@ -32,7 +32,7 @@ parser.add_argument('wsi_path', default=None, metavar='WSI_PATH', type=str,
 parser.add_argument('ckpt_path', default=None, metavar='CKPT_PATH', type=str,
                     help='Path to the saved ckpt file of a pytorch model')
 parser.add_argument('cnn_path', default=None, metavar='CNN_PATH', type=str,
-                    help='Path to the config filet related to the ckpt file')
+                    help='Path to the config file related to the ckpt file')
 parser.add_argument('prior_path', default=None, metavar='PRIOR_MAP_PATH',
                     type=str, help='Path to the result of first stage numpy file')
 parser.add_argument('probs_path', default=None, metavar='PROBS_MAP_PATH',
@@ -133,15 +133,15 @@ def run(args):
     level_sample = int(args.probs_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
     overlap = os.path.basename(args.prior_path).split('_')[-2].split('o')[-1]
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
+    logging.basicConfig(level=logging.INFO)
     
     save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
                 'save_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_fixmodel_fixsize_l{}'.format(args.roi_threshold, \
                 args.itc_threshold, args.canvas_size, args.patch_size, args.sample_type, level_save))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
-    
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
-    logging.basicConfig(level=logging.INFO)
 
     with open(args.cnn_path) as f:
         cnn = json.load(f)
@@ -158,11 +158,11 @@ def run(args):
         #           'save_roi_th_0.01_itc_th_1e0_5e2_edge_fixmodel_fixsize1x256_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
-        
-        # compute Point of Interest (POI)
         first_stage_map = np.load(os.path.join(args.prior_path, file))
         shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
         prior_map = cv2.resize(first_stage_map, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC)
+        
+        # compute Point of Interest (POI)
         POI = (prior_map / 255) > args.roi_threshold
         # Computes the inference mask
         filled_image = nd.morphology.binary_fill_holes(POI)
@@ -179,18 +179,17 @@ def run(args):
                 filled_mask[l: r, t: b] = np.logical_or(filled_mask[l: r, t: b], properties[i].image_filled)
                 region_confidence = first_stage_map[properties[i].coords[:,0], properties[i].coords[:,1]].mean()
                 feature_map[properties[i].coords[:,0], properties[i].coords[:,1]] = region_confidence
-        
-        # generate distance map
         distance, coord = nd.distance_transform_edt(filled_mask, return_indices=True)
+        # generate prior
         prior = (prior_map, distance, coord, feature_map)
-
+        
         # calculate heatmap & runtime
         dataloader = make_dataloader(
             args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
-        probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
         patch_total += dataloader.dataset._idcs_num
+        probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
         time_total += time_network
-
+        
         # save heatmap
         probs_map = (probs_map * 255).astype(np.uint8)
         shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
@@ -219,12 +218,13 @@ def main():
         "./camelyon16/configs/cnn_fix_l1.json",
         './datasets/test/prior_map_sampling_o0.25_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
+    args.canvas_size = 256
+    args.patch_size = 256
+    args.GPU = "2"
+    
     args.roi_threshold = 0.1
     args.itc_threshold = '1e0_5e2'
-    args.canvas_size = 800
-    args.patch_size = 128
-    args.sample_type = 'edge'
-    args.GPU = "3"
+    args.sample_type = 'whole'
     run(args)
 
 

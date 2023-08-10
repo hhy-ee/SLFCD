@@ -15,6 +15,25 @@ import cv2
 import os
 import sys
 
+def NMS(pred_mask, threshold, level_in, level_out, base_radius=3):
+    prob_wsi, x_wsi, y_wsi = [], [], []
+    X, Y = pred_mask.shape
+    radius = base_radius * 2**(max(0, 8-level_in))
+    while np.max(pred_mask / 255) > threshold:
+        prob_max = pred_mask.max()
+        max_idx = np.where(pred_mask == prob_max)
+        x_mask, y_mask = max_idx[0][0], max_idx[1][0]
+        prob_wsi.append(prob_max)
+        x_wsi.append(int(x_mask * 2**(level_in-level_out)))
+        y_wsi.append(int(y_mask * 2**(level_in-level_out)))
+        x_min = x_mask - radius if x_mask - radius > 0 else 0
+        x_max = x_mask + radius if x_mask + radius <= X else X
+        y_min = y_mask - radius if y_mask - radius > 0 else 0
+        y_max = y_mask + radius if y_mask + radius <= Y else Y
+        
+        pred_mask[x_min: x_max, y_min: y_max] = 0
+    return prob_wsi, x_wsi, y_wsi
+        
 
 def computeEvaluationMask(maskDIR, resolution, level):
     """Computes the evaluation mask.
@@ -199,22 +218,28 @@ def plotFROC(total_FPs, total_sensitivity):
     plt.ylabel('Metastasis detection sensitivity', fontsize=12)
     fig.suptitle('Free response receiver operating characteristic curve', fontsize=12)
     plt.plot(total_FPs, total_sensitivity, '-', color='#000000')
-    plt.savefig('/media/ps/passport2/hhy/camelyon16/train/0.png')
+    # plt.savefig('/media/ps/passport2/hhy/camelyon16/train/0.png')
     plt.show()
 
 
 if __name__ == "__main__":
-    wsi_folder = '/media/ps/passport2/hhy/camelyon16/test/images'
-    mask_folder = '/media/ps/passport2/hhy/camelyon16/test/tumor_mask_l5'
-    result_folder = '/media/ps/passport2/hhy/camelyon16/test/dens_map_sliding_ncrf_l5'
     
+    # configuration
+    wsi_folder = 'datasets/test/images'
+    mask_folder = 'datasets/test/tumor_mask_l5'
+    # result_folder = 'datasets/test/prior_map_sampling_dyn_nobg_o0.25_l1'
+    result_folder = 'datasets/test/dens_map_sampling_2s_l6/model_prior_o0.25_l1/save_roi_th_0.1_itc_th_1e0_5e2_canvas_800_patch_128_edge_dynmodel_fixsize_l3'
     threshold = 0.5
+    
+    # default setting
+    EVALUATION_MASK_LEVEL = int(mask_folder.split('l')[-1])  # Image level at which the evaluation is done
+    # PREDICT_MASK_LEVEL = int(result_folder.split('l')[-1])
+    PREDICT_MASK_LEVEL = 6
+    L0_RESOLUTION = 0.243  # pixel resolution at level 0
+    
     result_file_list = []
     result_file_list += [each for each in os.listdir(result_folder) if each.endswith('.npy')]
-
-    EVALUATION_MASK_LEVEL = int(mask_folder.split('l')[-1])  # Image level at which the evaluation is done
-    L0_RESOLUTION = 0.243  # pixel resolution at level 0
-
+    
     FROC_data = np.zeros((4, len(result_file_list)), dtype=object)
     FP_summary = np.zeros((2, len(result_file_list)), dtype=object)
     detection_summary = np.zeros((2, len(result_file_list)), dtype=object)
@@ -224,16 +249,21 @@ if __name__ == "__main__":
     ground_truth_test = set(ground_truth_test)
 
     caseNum = 0
-    for case in tqdm(result_file_list, total=len(result_file_list)):
+    
+    for case in tqdm(sorted(result_file_list), total=len(result_file_list)):
         # print('Evaluating Performance on image:', case[0:-4])
         # sys.stdout.flush()
+        
         slide = openslide.open_slide(os.path.join(wsi_folder, case.split('.')[0] + '.tif'))
-        scale = [int(i / 2**EVALUATION_MASK_LEVEL) for i in slide.level_dimensions[0]]
-        result_mask = np.load(os.path.join(result_folder, case)) # 0~255 uint8 
+        result_mask = np.load(os.path.join(result_folder, case)) # 0~255 uint8
+        
+        if result_mask.dtype.name == 'float64':
+            result_mask = (result_mask * 255).astype(np.uint8)
+        scale = [int(i / 2**PREDICT_MASK_LEVEL) for i in slide.level_dimensions[0]]
         result_mask = cv2.resize(result_mask.astype(np.uint8), (scale[1], scale[0]), interpolation=cv2.INTER_CUBIC)
-        result_mask = result_mask * ((result_mask / 255) > threshold)
-        Xcorr, Ycorr = np.where((result_mask / 255) > threshold)
-        Probs = [result_mask[x, y] for x, y in zip(Xcorr, Ycorr)]
+        
+        Probs, Xcorr, Ycorr = NMS(result_mask, threshold, PREDICT_MASK_LEVEL, EVALUATION_MASK_LEVEL, base_radius=3)
+
         is_tumor = case[0:-4] in ground_truth_test
         if (is_tumor):
             maskDIR = os.path.join(mask_folder, case)
@@ -248,13 +278,34 @@ if __name__ == "__main__":
         detection_summary[0][caseNum] = case
         FROC_data[1][caseNum], FROC_data[2][caseNum], FROC_data[3][caseNum], detection_summary[1][caseNum], \
         FP_summary[1][caseNum] = compute_FP_TP_Probs(Ycorr, Xcorr, Probs, is_tumor, evaluation_mask, ITC_labels)
+
+        # # plot
+        # s = 2 ** (EVALUATION_MASK_LEVEL - PREDICT_MASK_LEVEL)
+        # result_folder_2s = './datasets/test/dens_map_sampling_2s_l6/model_distance_l1/save_roi_th_0.1_min_100_max_500_fix_size_256_non_holes_l3'
+        # img_heat = cv2.imread(os.path.join(result_folder, case.split('.')[0]+'_heat.png'))
+        # result_mask = np.load(os.path.join(result_folder_2s, case))
+        # result_mask = cv2.resize(result_mask.astype(np.uint8), (scale[1], scale[0]), interpolation=cv2.INTER_CUBIC)
+        # Probs, Xcorr, Ycorr = NMS(result_mask, threshold, PREDICT_MASK_LEVEL, EVALUATION_MASK_LEVEL, base_radius=3)
+        # _, _, _, _, FP_summary_2s = compute_FP_TP_Probs(Ycorr, Xcorr, Probs, is_tumor, evaluation_mask, ITC_labels)
+        # for fp in FP_summary[1][caseNum]:
+        #     patch_size = 8
+        #     x, y = FP_summary[1][caseNum][fp][1], FP_summary[1][caseNum][fp][2]
+        #     l, t, r, b = x*s-patch_size//2, y*s-patch_size//2, x*s+patch_size//2, y*s+patch_size//2
+        #     cv2.rectangle(img_heat, (int(l), int(t)), (int(r), int(b)), (255,0,0), 1)
+        # for fp in FP_summary_2s:
+        #     patch_size = 12
+        #     x, y = FP_summary_2s[fp][1], FP_summary_2s[fp][2]
+        #     l, t, r, b = x*s-patch_size//2, y*s-patch_size//2, x*s+patch_size//2, y*s+patch_size//2
+        #     cv2.rectangle(img_heat, (int(l), int(t)), (int(r), int(b)), (0,255,0), 1)
+        # cv2.imwrite(os.path.join(os.path.dirname(result_folder), 'froc_result', case.split('.')[0] + '_fp.png'), img_heat)
+        
         caseNum += 1
 
     # Compute FROC curve
     total_FPs, total_sensitivity = computeFROC(FROC_data)
 
     # plot FROC curve
-    plotFROC(total_FPs, total_sensitivity)
+    # plotFROC(total_FPs, total_sensitivity)
 
     eval_threshold = [.25, .5, 1, 2, 4, 8]
     eval_TPs = np.interp(eval_threshold, total_FPs[::-1], total_sensitivity[::-1])

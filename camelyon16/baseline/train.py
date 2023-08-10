@@ -17,7 +17,7 @@ from tensorboardX import SummaryWriter
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from camelyon16.data.image_producer_base import ImageDataset
+from camelyon16.data.image_producer import ImageDataset
 
 torch.manual_seed(0)
 torch.cuda.manual_seed_all(0)

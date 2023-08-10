@@ -51,17 +51,17 @@ def parse_args():
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/train/tumor', 
-                              './datasets/train/prior_map_sampling_o0.5_l1',
-                              './datasets/train/crop_split_new_l1'])
+    args = parser.parse_args(['./datasets/test/images', 
+                              './datasets/test/prior_map_sampling_o0.25_l1',
+                              './datasets/test/crop_split_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = (1e0, 2e3)
+    args.itc_threshold = (1e0, 5e2)
     args.ini_patchsize = 256
-    args.nms_threshold = None
+    args.nms_threshold = 0.7
     args.nmm_threshold = 0.5
     args.fea_threshold = 0.5
     args.image_show = False
-    args.label_save = True
+    args.label_save = False
     return args
 
 if __name__ == "__main__":
@@ -83,10 +83,9 @@ if __name__ == "__main__":
     dyn_boxes_dict = {}
     final_boxes_dict ={}
     
-    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tumor_mask_l6'))
+    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
     for file in tqdm(sorted(dir), total=len(dir)):
         # initialization
-        filtered_properties = []
         total_boxes_dyn = []
         total_boxes_nms = []
         total_boxes_nmm = []
@@ -105,23 +104,23 @@ if __name__ == "__main__":
         
         # Computes the inference mask
         filled_image = nd.morphology.binary_fill_holes(POI)
-        dist_from_fg = nd.distance_transform_edt(~filled_image, return_indices=False)
-        filled_image = np.logical_or(filled_image, (dist_from_fg==1))
         evaluation_mask = measure.label(filled_image, connectivity=2)
         
         # eliminate abnormal tumor cells
-        max_label = np.amax(evaluation_mask)
         properties = measure.regionprops(evaluation_mask)
         filled_mask = np.zeros(filled_image.shape) > 0
-        for i in range(max_label):
-            patch_num = properties[i].major_axis_length * 0.243 * pow(2, level_prior)
-            # patch_num = properties[i].image_filled.sum()
-            # patch_num = (nd.distance_transform_edt(properties[i].image_filled)==1).sum()
-            if patch_num > args.itc_threshold[0] and patch_num < args.itc_threshold[1]:
+        for i in range(len(properties)):
+            itc_size = properties[i].major_axis_length * 0.243 * pow(2, level_prior)
+            if itc_size > args.itc_threshold[0] and itc_size < args.itc_threshold[1]:
                 l, t, r, b = properties[i].bbox
                 filled_mask[l: r, t: b] = np.logical_or(filled_mask[l: r, t: b], properties[i].image_filled)
-                filtered_properties.append(properties[i])
-        
+
+        dist_from_bg = nd.distance_transform_edt(filled_mask, return_indices=False)
+        dist_from_fg = nd.distance_transform_edt(~filled_mask, return_indices=False)
+        filtered_POI = np.logical_or((dist_from_bg>=1), (dist_from_fg==1))
+        filtered_evaluation_mask = measure.label(filtered_POI, connectivity=2)
+        filtered_properties = measure.regionprops(filtered_evaluation_mask)
+                
         if args.image_show:
             img_rgb = slide.read_region((0, 0), level_show, \
                         tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
@@ -162,15 +161,14 @@ if __name__ == "__main__":
             cv2.imwrite(os.path.join(args.output_path, file.split('.')[0] + '_conf.png'), heat_img)
             
         # generate patches from each tumor cell
-        distance, coord = nd.distance_transform_edt(filled_mask, return_indices=True)
+        distance, coord = nd.distance_transform_edt(filtered_POI, return_indices=True)
         for i in range(len(filtered_properties)):
             boxes_tumor = []
             tc_X = filtered_properties[i].coords[:,0]
             tc_Y = filtered_properties[i].coords[:,1]
             for idx in range(len(tc_X)):
                 x_center, y_center = tc_X[idx], tc_Y[idx]
-                edge_dist = distance[x_center, y_center]
-                if edge_dist >= 1:
+                if distance[x_center, y_center] >= 1:
                     patch_size = args.ini_patchsize // scale_out
                     l = x_center * scale_in - patch_size // 2
                     t = y_center * scale_in - patch_size // 2
@@ -184,20 +182,17 @@ if __name__ == "__main__":
             boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_tumor]
             fix_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
 
-            # fix patches
-            boxes_dyn = boxes_tumor
-
-            # # dynamic patches
-            # boxes_tumor = np.array(boxes_tumor)
-            # _, nms_boxes_dict = NMS(boxes_tumor, args.nms_threshold, box_shrink=True)
-            # boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
-            # first_nms_boxes_dict = nms_boxes_dict
-            # while len(nms_boxes_dict) != len(boxes_tumor):
-            #     boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
-            #     boxes_re_nms = np.array([[i[0], i[1], i[0] + i[2], i[1] + i[3], i[4]] for i in boxes_dyn])
-            #     _, nms_boxes_dict = NMS(boxes_re_nms, args.nms_threshold, box_shrink=True)
-            # boxes_dyn = [[i[0], i[1], i[0]+i[2], i[1]+i[3], i[4]] for i in boxes_dyn]
-            # # boxes_dyn = [i['keep'][:4] + [i['keep'][5]] for i in first_nms_boxes_dict] + boxes_dyn[len(first_nms_boxes_dict):]
+            # dynamic patches
+            boxes_tumor = np.array(boxes_tumor)
+            _, nms_boxes_dict = NMS(boxes_tumor, args.nms_threshold, box_shrink=True)
+            boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
+            first_nms_boxes_dict = nms_boxes_dict
+            while len(nms_boxes_dict) != len(boxes_tumor):
+                boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
+                boxes_re_nms = np.array([[i[0], i[1], i[0] + i[2], i[1] + i[3], i[4]] for i in boxes_dyn])
+                _, nms_boxes_dict = NMS(boxes_re_nms, args.nms_threshold, box_shrink=True)
+            boxes_dyn = [[i[0], i[1], i[0]+i[2], i[1]+i[3], i[4]] for i in boxes_dyn]
+            # boxes_dyn = [i['keep'][:4] + [i['keep'][5]] for i in first_nms_boxes_dict] + boxes_dyn[len(first_nms_boxes_dict):]
 
             total_boxes_dyn += boxes_dyn
 
