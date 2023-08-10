@@ -48,18 +48,20 @@ def parse_args():
     parser.add_argument('--ini_patchsize', help='The size of initial patch size')
     parser.add_argument('--nmm_threshold', help='The threshold to select the cropped region')
     parser.add_argument('--fea_threshold', help='The threshold to generate feature')
+    parser.add_argument('--patch_mode', help='set to use fix patch size or dynamic size')
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/test/images', 
-                              './datasets/test/prior_map_sampling_o0.25_l1',
-                              './datasets/test/crop_split_l1'])
+    args = parser.parse_args(['./datasets/train/tumor', 
+                              './datasets/train/prior_map_sampling_o0.5_l1',
+                              './datasets/train/crop_split_nms_1.0_nmm_0.5_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = (1e0, 5e2)
+    args.itc_threshold = (1e0, 2e3)
     args.ini_patchsize = 256
-    args.nms_threshold = 0.7
+    args.nms_threshold = 1.0
     args.nmm_threshold = 0.5
     args.fea_threshold = 0.5
+    args.patch_mode = 'fix'
     args.image_show = False
     args.label_save = False
     return args
@@ -179,7 +181,8 @@ if __name__ == "__main__":
                     boxes_tumor.append([l, t, r, b, scr])
             
             # save fix-sized patches
-            boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_tumor]
+            boxes_fix = list(boxes_tumor)
+            boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_fix]
             fix_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
 
             # dynamic patches
@@ -192,21 +195,20 @@ if __name__ == "__main__":
                 boxes_re_nms = np.array([[i[0], i[1], i[0] + i[2], i[1] + i[3], i[4]] for i in boxes_dyn])
                 _, nms_boxes_dict = NMS(boxes_re_nms, args.nms_threshold, box_shrink=True)
             boxes_dyn = [[i[0], i[1], i[0]+i[2], i[1]+i[3], i[4]] for i in boxes_dyn]
-            # boxes_dyn = [i['keep'][:4] + [i['keep'][5]] for i in first_nms_boxes_dict] + boxes_dyn[len(first_nms_boxes_dict):]
-
-            total_boxes_dyn += boxes_dyn
 
             # save dynamic-sized patches
             boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_dyn]
             dyn_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
+            total_boxes_dyn += boxes_dyn
+            
+            if args.patch_mode == 'fix':
+                boxes_seg = np.array(boxes_fix)
+            elif args.patch_mode == 'dyn':
+                boxes_seg = np.array(boxes_dyn)
 
             # NMS
-            if args.nms_threshold is not None:
-                boxes_dyn = np.array(boxes_dyn)
-                keep_boxes_list, nms_boxes_dict = NMS(boxes_dyn, args.nms_threshold)
-                boxes_nms = [list(i) for i in keep_boxes_list]
-            else:
-                boxes_nms = boxes_dyn
+            keep_boxes_list, nms_boxes_dict = NMS(boxes_seg, args.nms_threshold)
+            boxes_nms = [list(i) for i in keep_boxes_list]
             total_boxes_nms += boxes_nms
 
             # NMM
