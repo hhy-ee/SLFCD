@@ -1,12 +1,6 @@
-import os
-import sys
 import cv2
 import PIL
-import random
-import openslide
 import numpy as np
-from PIL import Image
-from PIL import ImageDraw
 from scipy import ndimage as nd
 from torch.utils.data import Dataset
 
@@ -28,7 +22,7 @@ class WSIPatchDataset(Dataset):
 
     def _pre_process(self):
         self._image_size = tuple([int(i / 2**self._level_ckpt) for i in self._slide.level_dimensions[0]])
-        self.first_stage_map, self.dist_from_bg, self.nearest_bg_coord, self.feature_region_conf = self._prior
+        self.prior_map, self.dist_from_bg, self.nearest_bg_coord, self.feature_region_conf = self._prior
         
         if self._args.sample_type == 'edge':
             self._POI = (self.dist_from_bg == 1)

@@ -48,20 +48,22 @@ def parse_args():
     parser.add_argument('--ini_patchsize', help='The size of initial patch size')
     parser.add_argument('--nmm_threshold', help='The threshold to select the cropped region')
     parser.add_argument('--fea_threshold', help='The threshold to generate feature')
-    parser.add_argument('--patch_mode', help='set to use fix patch size or dynamic size')
+    parser.add_argument('--patch_type', help='set to use fix patch size or dynamic size')
+    parser.add_argument('--sample_type', help='sample patches from edge, bilateral or whole')
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/train/tumor', 
-                              './datasets/train/prior_map_sampling_o0.5_l1',
-                              './datasets/train/crop_split_nms_1.0_nmm_0.5_l1'])
+    args = parser.parse_args(['./datasets/test/images', 
+                              './datasets/test/prior_map_sampling_o0.25_l1',
+                              './datasets/test/crop_split_nms_0.7_nmm_0.1_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = (1e0, 2e3)
+    args.itc_threshold = '1e0_5e2'
     args.ini_patchsize = 256
-    args.nms_threshold = 1.0
-    args.nmm_threshold = 0.5
+    args.nms_threshold = 0.7
+    args.nmm_threshold = 0.1
     args.fea_threshold = 0.5
-    args.patch_mode = 'fix'
+    args.patch_type = 'dyn'
+    args.sample_type = 'edge'
     args.image_show = False
     args.label_save = False
     return args
@@ -91,6 +93,7 @@ if __name__ == "__main__":
         total_boxes_dyn = []
         total_boxes_nms = []
         total_boxes_nmm = []
+        filtered_properties = []
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         prior_shape = tuple([int(i / 2**level_prior) for i in slide.level_dimensions[0]])
         show_shape = tuple([int(i / 2**level_prior) for i in slide.level_dimensions[0]])
@@ -108,20 +111,16 @@ if __name__ == "__main__":
         filled_image = nd.morphology.binary_fill_holes(POI)
         evaluation_mask = measure.label(filled_image, connectivity=2)
         
-        # eliminate abnormal tumor cells
+        # Eliminate abnormal tumor cells
         properties = measure.regionprops(evaluation_mask)
         filled_mask = np.zeros(filled_image.shape) > 0
+        itc_threshold = tuple([float(t) for t in args.itc_threshold.split('_')])
         for i in range(len(properties)):
             itc_size = properties[i].major_axis_length * 0.243 * pow(2, level_prior)
-            if itc_size > args.itc_threshold[0] and itc_size < args.itc_threshold[1]:
+            if itc_size > itc_threshold[0] and itc_size < itc_threshold[1]:
                 l, t, r, b = properties[i].bbox
                 filled_mask[l: r, t: b] = np.logical_or(filled_mask[l: r, t: b], properties[i].image_filled)
-
-        dist_from_bg = nd.distance_transform_edt(filled_mask, return_indices=False)
-        dist_from_fg = nd.distance_transform_edt(~filled_mask, return_indices=False)
-        filtered_POI = np.logical_or((dist_from_bg>=1), (dist_from_fg==1))
-        filtered_evaluation_mask = measure.label(filtered_POI, connectivity=2)
-        filtered_properties = measure.regionprops(filtered_evaluation_mask)
+                filtered_properties.append(properties[i])
                 
         if args.image_show:
             img_rgb = slide.read_region((0, 0), level_show, \
@@ -161,16 +160,34 @@ if __name__ == "__main__":
             conf_map_rgb = cv2.cvtColor(conf_map_rgb, cv2.COLOR_BGR2RGB)
             heat_img = cv2.addWeighted(conf_map_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
             cv2.imwrite(os.path.join(args.output_path, file.split('.')[0] + '_conf.png'), heat_img)
+        
+        # Sample center point from specialized region of tumor cell
+        if args.sample_type == 'edge':
+            dist_from_bg = nd.distance_transform_edt(filled_mask, return_indices=False)
+            filtered_POI = (dist_from_bg == 1)
+        elif args.sample_type == 'bilateral':
+            dist_from_bg = nd.distance_transform_edt(filled_mask, return_indices=False)
+            dist_from_fg = nd.distance_transform_edt(~filled_mask, return_indices=False)
+            filtered_POI = np.logical_or((dist_from_bg==1), (dist_from_fg==1))
+            filtered_mask = np.logical_or((dist_from_bg>=1), (dist_from_fg==1))
+            filtered_evaluation_mask = measure.label(filtered_mask, connectivity=2)
+            filtered_properties = measure.regionprops(filtered_evaluation_mask)
+        elif args.sample_type == 'whole':
+            dist_from_bg = nd.distance_transform_edt(filled_mask, return_indices=False)
+            dist_from_fg = nd.distance_transform_edt(~filled_mask, return_indices=False)
+            filtered_POI = np.logical_or((dist_from_bg>=1), (dist_from_fg==1))
+            filtered_mask = np.logical_or((dist_from_bg>=1), (dist_from_fg==1))
+            filtered_evaluation_mask = measure.label(filtered_mask, connectivity=2)
+            filtered_properties = measure.regionprops(filtered_evaluation_mask)
             
-        # generate patches from each tumor cell
-        distance, coord = nd.distance_transform_edt(filtered_POI, return_indices=True)
+        # Generate patches from each tumor cell
         for i in range(len(filtered_properties)):
             boxes_tumor = []
             tc_X = filtered_properties[i].coords[:,0]
             tc_Y = filtered_properties[i].coords[:,1]
             for idx in range(len(tc_X)):
                 x_center, y_center = tc_X[idx], tc_Y[idx]
-                if distance[x_center, y_center] >= 1:
+                if filtered_POI[x_center, y_center]:
                     patch_size = args.ini_patchsize // scale_out
                     l = x_center * scale_in - patch_size // 2
                     t = y_center * scale_in - patch_size // 2
@@ -201,9 +218,9 @@ if __name__ == "__main__":
             dyn_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
             total_boxes_dyn += boxes_dyn
             
-            if args.patch_mode == 'fix':
+            if args.patch_type == 'fix':
                 boxes_seg = np.array(boxes_fix)
-            elif args.patch_mode == 'dyn':
+            elif args.patch_type == 'dyn':
                 boxes_seg = np.array(boxes_dyn)
 
             # NMS
@@ -302,6 +319,10 @@ if __name__ == "__main__":
     
     with open(os.path.join(args.output_path, 'results.json'), 'w') as result_file:
         json.dump(final_boxes_dict, result_file)
+    
+    dyn_boxes_dict.update({'data_info': {'th_nms': args.nms_threshold, 'th_nmm': args.nmm_threshold,
+                                            'th_roi': args.roi_threshold, 'th_itc': args.itc_threshold,
+                                            'patch_type': args.patch_type, 'sample_type': args.sample_type}})
     with open(os.path.join(args.output_path, 'results_boxes.json'), 'w') as result_file:
         json.dump(dyn_boxes_dict, result_file)
 

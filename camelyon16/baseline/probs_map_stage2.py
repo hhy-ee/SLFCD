@@ -224,7 +224,7 @@ def main():
     
     args.roi_threshold = 0.1
     args.itc_threshold = '1e0_5e2'
-    args.sample_type = 'whole'
+    args.sample_type = 'edge'
     run(args)
 
 

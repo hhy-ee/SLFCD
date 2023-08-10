@@ -37,7 +37,7 @@ parser.add_argument('prior_path', default=None, metavar='PRIOR_MAP_PATH',
                     type=str, help='Path to the result of first stage numpy file')
 parser.add_argument('probs_path', default=None, metavar='PROBS_MAP_PATH',
                     type=str, help='Path to the output probs_map numpy file')
-parser.add_argument('assign_path', default=None, metavar='ASSIGN_PATH',
+parser.add_argument('--assign_path', default=None, metavar='ASSIGN_PATH',
                     help='Path to the result of assignment numpy file')
 parser.add_argument('--batch_inf', default=False, help='whether to resize'
                     'wsi patch to implemetn batch inference, default 0')
@@ -74,19 +74,22 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
     time_total = 0.
     
     with torch.no_grad():
-        for (data, rect, box) in dataloader:
+        for (data, box, canvas, patch) in dataloader:
             data = Variable(data.cuda(non_blocking=True))
             output = model(data)
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
 
-            rect = [(item / resolution).to(torch.int) for item in rect]
-            box = [(item / resolution).to(torch.int) for item in box]
-            for bs in range(probs.shape[0]):
-                left, top, right, bot = rect[0][bs], rect[1][bs], rect[2][bs], rect[3][bs]
-                l, t, r, b, w, h = box[0][bs], box[1][bs], box[2][bs], box[3][bs], box[4][bs], box[5][bs]
-                prob = transform.resize(probs[bs, 0], (w, h))
-                counter[left: right, top: bot] += 1
-                probs_map[left: right, top: bot] += prob[l: r, t: b]
+            box = [[(item / resolution).to(torch.int) for item in list] for list in box]
+            patch = [[(item / resolution).to(torch.int) for item in list] for list in patch]
+            for bs in range(len(probs)):
+                for pt in range(len(box)):
+                    b_l, b_t, b_r, r_b = box[pt][0][bs], box[pt][1][bs], box[pt][2][bs], box[pt][3][bs]
+                    c_l, c_t, c_r, c_b = canvas[pt][0][bs], canvas[pt][1][bs], canvas[pt][2][bs], canvas[pt][3][bs]
+                    p_l, p_t, p_r, p_b, p_x, p_y = patch[pt][0][bs], patch[pt][1][bs], patch[pt][2][bs], \
+                                                                patch[pt][3][bs], patch[pt][4][bs], patch[pt][5][bs]
+                    prob = transform.resize(probs[bs, 0, c_l: c_r, c_t: c_b], (p_x, p_y))
+                    counter[b_l: b_r, b_t: r_b] += 1
+                    probs_map[b_l: b_r, b_t: r_b] += prob[p_l: p_r, p_t: p_b]
 
             count += 1
             time_spent = time.time() - time_now
@@ -129,9 +132,13 @@ def run(args):
     os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
     logging.basicConfig(level=logging.INFO)
 
+    with open(args.assign_path, 'r') as f_assign:
+        assign = json.load(f_assign)
+    
+    info = assign['data_info']
     save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                'save_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_fixmodel_fixsize_l{}'.format(args.roi_threshold, \
-                args.itc_threshold, args.canvas_size, args.patch_size, args.sample_type, level_save))
+                'save_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_fixmodel_{}size_l{}'.format(info['th_roi'], \
+                info['th_itc'], args.canvas_size, args.patch_size, info['sample_type'], info['patch_type'], level_save))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
         
@@ -141,14 +148,11 @@ def run(args):
     model = chose_model(cnn['model'])
     model.load_state_dict(ckpt['state_dict'])
     model = model.cuda().eval()
-    
-    with open(args.assign_path, 'r') as f_assign:
-        assign = json.load(f_assign)
 
     time_total = 0.0
     patch_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
-    for file in sorted(dir)[:40]:
+    for file in sorted(dir)[80:]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
         #           'save_roi_th_0.01_itc_th_1e0_5e2_edge_fixmodel_fixsize1x256_l{}'.format(level_save), file)):
         #     continue
@@ -199,10 +203,10 @@ def main():
         './datasets/test/prior_map_sampling_o0.25_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
     args.canvas_size = 800
-    args.patch_size = 256
-    args.GPU = "2"
+    args.patch_size = 384
+    args.GPU = "3"
     
-    args.assign_path = "./datasets/test/crop_split_l1/results_boxes.json",
+    args.assign_path = "./datasets/test/crop_split_nms_0.7_nmm_0.1_l1/results_boxes.json"
     run(args)
 
 
