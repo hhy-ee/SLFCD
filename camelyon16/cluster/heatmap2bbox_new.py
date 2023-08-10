@@ -52,13 +52,13 @@ def parse_args():
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
     args = parser.parse_args(['./datasets/train/tumor', 
-                              './datasets/train/dens_map_sampling_l8',
+                              './datasets/train/prior_map_sampling_o0.5_l1',
                               './datasets/train/crop_split_new_l1'])
     args.roi_threshold = 0.1
     args.itc_threshold = (1e0, 2e3)
     args.ini_patchsize = 256
     args.nms_threshold = 0.7
-    args.nmm_threshold = 0.1
+    args.nmm_threshold = 0.3
     args.fea_threshold = 0.5
     args.image_show = False
     args.label_save = False
@@ -95,7 +95,7 @@ if __name__ == "__main__":
         ext_shape = tuple([int(i / 2**level_output) for i in slide.level_dimensions[0]])
         
         # calculate score of each patches
-        first_stage_map = np.load(os.path.join(args.prior_path, 'model_l1/save_l3', file))
+        first_stage_map = np.load(os.path.join(args.prior_path, file))
         prior_map = cv2.resize(first_stage_map, (prior_shape[1], prior_shape[0]), interpolation=cv2.INTER_CUBIC)
         if 'train' in args.wsi_path:
             gt_tumor_mask = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tumor_mask_l{}'.format(level_prior), file))
@@ -140,7 +140,7 @@ if __name__ == "__main__":
             
             distance, coord = nd.distance_transform_edt(filled_mask, return_indices=True)
             edge_X, edge_Y = np.where(distance == 1)
-            prior_heat = cv2.imread(os.path.join(args.prior_path, 'model_l1/save_l3', file.replace('.npy','_heat.png')))
+            prior_heat = cv2.imread(os.path.join(args.prior_path, file.replace('.npy','_heat.png')))
             prior_heat = cv2.resize(prior_heat, prior_shape, interpolation=cv2.INTER_CUBIC)
             prior_heat[edge_Y, edge_X, :] = [0, 255, 0]
             prior_heat = cv2.resize(prior_heat, show_shape, interpolation=cv2.INTER_CUBIC)
@@ -186,6 +186,8 @@ if __name__ == "__main__":
             # boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_tumor]
             # dyn_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
 
+            boxes_dyn = boxes_tumor
+
             # dynamic patches 1
             # boxes_dyn = []
             # for idx in range(len(tc_X)):
@@ -202,15 +204,15 @@ if __name__ == "__main__":
 
 
             # dynamic patches 2
-            boxes_tumor = np.array(boxes_tumor)
-            _, nms_boxes_dict = NMS(boxes_tumor, args.nms_threshold, box_shrink=True)
-            boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
-            first_nms_boxes_dict = nms_boxes_dict
-            while len(nms_boxes_dict) != len(boxes_tumor):
-                boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
-                boxes_re_nms = np.array([[i[0], i[1], i[0] + i[2], i[1] + i[3], i[4]] for i in boxes_dyn])
-                _, nms_boxes_dict = NMS(boxes_re_nms, args.nms_threshold, box_shrink=True)
-            boxes_dyn = [[i[0], i[1], i[0]+i[2], i[1]+i[3], i[4]] for i in boxes_dyn]
+            # boxes_tumor = np.array(boxes_tumor)
+            # _, nms_boxes_dict = NMS(boxes_tumor, args.nms_threshold, box_shrink=True)
+            # boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
+            # first_nms_boxes_dict = nms_boxes_dict
+            # while len(nms_boxes_dict) != len(boxes_tumor):
+            #     boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
+            #     boxes_re_nms = np.array([[i[0], i[1], i[0] + i[2], i[1] + i[3], i[4]] for i in boxes_dyn])
+            #     _, nms_boxes_dict = NMS(boxes_re_nms, args.nms_threshold, box_shrink=True)
+            # boxes_dyn = [[i[0], i[1], i[0]+i[2], i[1]+i[3], i[4]] for i in boxes_dyn]
             # boxes_dyn = [i['keep'][:4] + [i['keep'][5]] for i in first_nms_boxes_dict] + boxes_dyn[len(first_nms_boxes_dict):]
 
             total_boxes_dyn += boxes_dyn
@@ -220,12 +222,12 @@ if __name__ == "__main__":
             dyn_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
 
             # NMS
-            boxes_dyn = np.array(boxes_dyn)
-            keep_boxes_list, nms_boxes_dict = NMS(boxes_dyn, args.nms_threshold)
-            boxes_nms = [list(i) for i in keep_boxes_list]
-            total_boxes_nms += boxes_nms
+            # boxes_dyn = np.array(boxes_dyn)
+            # keep_boxes_list, nms_boxes_dict = NMS(boxes_dyn, args.nms_threshold)
+            # boxes_nms = [list(i) for i in keep_boxes_list]
+            # total_boxes_nms += boxes_nms
             
-            # boxes_nms = np.array(boxes_dyn)
+            boxes_nms = boxes_dyn
             
             # NMM
             boxes_nms = np.array(boxes_nms)
