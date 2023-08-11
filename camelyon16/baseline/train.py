@@ -218,10 +218,10 @@ def main():
     # run(args)
     
     args = parser.parse_args([
-        "./camelyon16/configs/cnn_dyn_l0.json",
-        "./save_train/train_dyn_l0"])
+        "./camelyon16/configs/cnn_fix_l0.json",
+        "./save_train/train_fix_l0"])
     args.device_ids = '3'
-    args.init_mode = 'resume'
+    args.init_mode = ''
     run(args)
 
 if __name__ == '__main__':

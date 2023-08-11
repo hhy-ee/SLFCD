@@ -137,7 +137,7 @@ def run(args):
     
     info = assign['data_info']
     save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                'save_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_fixmodel_{}size_l{}'.format(info['th_roi'], \
+                'save_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_dynmodel_{}size_l{}'.format(info['th_roi'], \
                 info['th_itc'], args.canvas_size, args.patch_size, info['sample_type'], info['patch_type'], level_save))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
@@ -152,7 +152,7 @@ def run(args):
     time_total = 0.0
     patch_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
-    for file in sorted(dir)[80:]:
+    for file in sorted(dir)[:40]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
         #           'save_roi_th_0.01_itc_th_1e0_5e2_edge_fixmodel_fixsize1x256_l{}'.format(level_save), file)):
         #     continue
@@ -198,13 +198,13 @@ def run(args):
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_fix_l1",
-        "./camelyon16/configs/cnn_fix_l1.json",
+        "./save_train/train_dyn_l1",
+        "./camelyon16/configs/cnn_dyn_l1.json",
         './datasets/test/prior_map_sampling_o0.25_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
     args.canvas_size = 800
-    args.patch_size = 384
-    args.GPU = "3"
+    args.patch_size = 256
+    args.GPU = "2"
     
     args.assign_path = "./datasets/test/crop_split_nms_0.7_nmm_0.1_l1/results_boxes.json"
     run(args)

@@ -178,12 +178,21 @@ def run(args):
     logging.info('Total Patch Number : {:d}'.format(patch_total))
     
 def main():
+    # args = parser.parse_args([
+    #     "./datasets/train/tumor",
+    #     "./save_train/train_fix_l1",
+    #     "./camelyon16/configs/cnn_fix_l1.json",
+    #     './datasets/train/prior_map_sampling_o0.5_l1'])
+    # args.overlap = 0.5
+    # args.GPU = "0"
+    # run(args)
+    
     args = parser.parse_args([
-        "./datasets/train/tumor",
-        "./save_train/train_fix_l1",
-        "./camelyon16/configs/cnn_fix_l1.json",
-        './datasets/train/prior_map_sampling_o0.5_l1'])
-    args.overlap = 0.5
+        "/media/ps/passport2/hhy/camelyon16/test/images",
+        "./save_train/train_dyn_l0",
+        "./camelyon16/configs/cnn_dyn_l0.json",
+        '/media/ps/passport2/hhy/camelyon16/test/pengjq_test/prior_map_sampling_o0.25_l0'])
+    args.overlap = 0.25
     args.GPU = "0"
     run(args)
 
