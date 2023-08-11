@@ -53,19 +53,19 @@ def parse_args():
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/test/images', 
-                              './datasets/test/prior_map_sampling_o0.25_l1',
-                              './datasets/test/crop_split_nms_0.7_nmm_0.1_l1'])
+    args = parser.parse_args(['./datasets/train/tumor', 
+                              './datasets/train/prior_map_sampling_o0.5_l1',
+                              './datasets/train/crop_split_nms_1.0_nmm_0.5_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = '1e0_5e2'
+    args.itc_threshold = '1e0_2e3'
     args.ini_patchsize = 256
-    args.nms_threshold = 0.7
-    args.nmm_threshold = 0.1
+    args.nms_threshold = 1.0
+    args.nmm_threshold = 0.5
     args.fea_threshold = 0.5
-    args.patch_type = 'dyn'
-    args.sample_type = 'edge'
+    args.patch_type = 'fix'
+    args.sample_type = 'whole'
     args.image_show = False
-    args.label_save = False
+    args.label_save = True
     return args
 
 if __name__ == "__main__":
@@ -86,8 +86,12 @@ if __name__ == "__main__":
     fix_boxes_dict = {}
     dyn_boxes_dict = {}
     final_boxes_dict ={}
-    
-    dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
+
+    if 'train' in args.wsi_path:
+        dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tumor_mask_l6'))
+    elif 'test' in args.wsi_path:
+        dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
+
     for file in tqdm(sorted(dir), total=len(dir)):
         # initialization
         total_boxes_dyn = []
@@ -162,7 +166,9 @@ if __name__ == "__main__":
             cv2.imwrite(os.path.join(args.output_path, file.split('.')[0] + '_conf.png'), heat_img)
         
         # Sample center point from specialized region of tumor cell
-        if args.sample_type == 'edge':
+        if not filled_mask.any():
+            pass
+        elif args.sample_type == 'edge':
             dist_from_bg = nd.distance_transform_edt(filled_mask, return_indices=False)
             filtered_POI = (dist_from_bg == 1)
         elif args.sample_type == 'bilateral':
@@ -181,6 +187,7 @@ if __name__ == "__main__":
             filtered_properties = measure.regionprops(filtered_evaluation_mask)
             
         # Generate patches from each tumor cell
+        max_w, max_h = first_stage_map.shape
         for i in range(len(filtered_properties)):
             boxes_tumor = []
             tc_X = filtered_properties[i].coords[:,0]
@@ -189,9 +196,10 @@ if __name__ == "__main__":
                 x_center, y_center = tc_X[idx], tc_Y[idx]
                 if filtered_POI[x_center, y_center]:
                     patch_size = args.ini_patchsize // scale_out
-                    l = x_center * scale_in - patch_size // 2
-                    t = y_center * scale_in - patch_size // 2
-                    r, b = l + patch_size, t + patch_size
+                    x_center = np.clip(x_center * scale_in, patch_size // 2, max_w - patch_size // 2)
+                    y_center = np.clip(y_center * scale_in, patch_size // 2, max_h - patch_size // 2)
+                    l, r = x_center - patch_size // 2, x_center + patch_size // 2
+                    t, b = y_center - patch_size // 2, y_center + patch_size // 2
                     pos_idx = np.where(first_stage_map[l: r, t: b] / 255 > args.roi_threshold)
                     scr = first_stage_map[l: r, t: b][pos_idx].mean()
                     l, t, r, b = l * scale_out, t * scale_out, r * scale_out, b  * scale_out
