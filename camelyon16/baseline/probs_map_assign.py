@@ -22,7 +22,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 torch.manual_seed(0)
 torch.cuda.manual_seed_all(0)
 
-from camelyon16.data.prob_producer_assign import WSIPatchDataset  # noqa
+from camelyon16.data.prob_producer_assgin import WSIPatchDataset  # noqa
 
 
 parser = argparse.ArgumentParser(description='Get the probability map of tumor'
@@ -39,8 +39,6 @@ parser.add_argument('probs_path', default=None, metavar='PROBS_MAP_PATH',
                     type=str, help='Path to the output probs_map numpy file')
 parser.add_argument('--assign_path', default=None, metavar='ASSIGN_PATH',
                     help='Path to the result of assignment numpy file')
-parser.add_argument('--batch_inf', default=False, help='whether to resize'
-                    'wsi patch to implemetn batch inference, default 0')
 parser.add_argument('--GPU', default='0', type=str, help='which GPU to use')
 parser.add_argument('--num_workers', default=0, type=int, help='number of '
                     'workers to use to make batch, default 5')
@@ -74,23 +72,20 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
     time_total = 0.
     
     with torch.no_grad():
-        for (data, box, canvas, patch) in dataloader:
+        for (data, box, moved_box) in dataloader:
             data = Variable(data.cuda(non_blocking=True))
             output = model(data)
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
-
-            box = [[(item / resolution).to(torch.int) for item in list] for list in box]
-            patch = [[(item / resolution).to(torch.int) for item in list] for list in patch]
-            for bs in range(len(probs)):
-                for pt in range(len(box)):
-                    b_l, b_t, b_r, r_b = box[pt][0][bs], box[pt][1][bs], box[pt][2][bs], box[pt][3][bs]
-                    c_l, c_t, c_r, c_b = canvas[pt][0][bs], canvas[pt][1][bs], canvas[pt][2][bs], canvas[pt][3][bs]
-                    p_l, p_t, p_r, p_b, p_x, p_y = patch[pt][0][bs], patch[pt][1][bs], patch[pt][2][bs], \
-                                                                patch[pt][3][bs], patch[pt][4][bs], patch[pt][5][bs]
-                    prob = transform.resize(probs[bs, 0, c_l: c_r, c_t: c_b], (p_x, p_y))
-                    counter[b_l: b_r, b_t: r_b] += 1
-                    probs_map[b_l: b_r, b_t: r_b] += prob[p_l: p_r, p_t: p_b]
-
+            box = box // resolution
+            
+            for i in range(probs.shape[0]):
+                for j in range(box.shape[1]):
+                    counter[box[i][j][0]:box[i][j][2], box[i][j][1]:box[i][j][3]] += 1
+                    patch_prob = probs[i, 0, moved_box[i][j][0]:moved_box[i][j][2], moved_box[i][j][1]:moved_box[i][j][3]]
+                    if patch_prob.shape != (0,0):
+                        patch_prob = transform.resize(patch_prob, (box[i][j][2]-box[i][j][0], box[i][j][3]-box[i][j][1]))
+                        probs_map[box[i][j][0]:box[i][j][2], box[i][j][1]:box[i][j][3]] += patch_prob
+            
             count += 1
             time_spent = time.time() - time_now
             time_now = time.time()
@@ -109,13 +104,14 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
     return probs_map, time_total
 
 
-def make_dataloader(args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE'):
+def make_dataloader(args, cnn, slide, level_ckpt, assign, flip='NONE', rotate='NONE'):
     batch_size = cnn['batch_size']
     num_workers = args.num_workers
 
     dataloader = DataLoader(
-        WSIPatchDataset(slide, prior, level_sample, level_ckpt, args, file,
-                        image_size=args.patch_size, normalize=True, flip=flip, rotate=rotate),
+        WSIPatchDataset(slide, level_ckpt, assign,
+                        image_size=cnn['image_size'],
+                        normalize=True, flip=flip, rotate=rotate),
         batch_size=batch_size, num_workers=num_workers, drop_last=False)
 
     return dataloader
@@ -131,23 +127,22 @@ def run(args):
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.GPU
     logging.basicConfig(level=logging.INFO)
-
-    with open(args.assign_path, 'r') as f_assign:
-        assign = json.load(f_assign)
     
-    info = assign['data_info']
     save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                'save_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_dynmodel_{}size_l{}'.format(info['th_roi'], \
-                info['th_itc'], args.canvas_size, args.patch_size, info['sample_type'], info['patch_type'], level_save))
+                'save_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_fixmodel_dynsize_l{}'.format(args.roi_threshold, \
+                args.itc_threshold, args.canvas_size, args.patch_size, args.sample_type, level_save))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
-        
+    
     with open(args.cnn_path) as f:
         cnn = json.load(f)
     ckpt = torch.load(os.path.join(args.ckpt_path, 'best.ckpt'))
     model = chose_model(cnn['model'])
     model.load_state_dict(ckpt['state_dict'])
     model = model.cuda().eval()
+    
+    with open(args.assign_path, 'r') as f_assign:
+        assign = json.load(f_assign)
 
     time_total = 0.0
     patch_total = 0
@@ -162,16 +157,15 @@ def run(args):
         prior_map = cv2.resize(first_stage_map, (shape[1], shape[0]), interpolation=cv2.INTER_CUBIC)
         
         # Get patches from assignment files
-        file_keys = [key for key in assign.keys() if file.split('.')[0] in key]
-        assign_per_img = [box for key in file_keys for box in assign[key]]
-        # generate prior
-        prior = (prior_map, assign_per_img)
-        
+        assign_per_img = []
+        for item in assign:
+            if item['file_name'] == file.split('.')[0]:
+                assign_per_img.append(item)
         # calculate heatmap & runtime
         dataloader = make_dataloader(
-            args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
-        patch_total += dataloader.dataset._idcs_num
+            args, cnn, slide, level_ckpt, assign_per_img, flip='NONE', rotate='NONE')
         probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
+        patch_total += dataloader.dataset._idcs_num
         time_total += time_network
         
         # save heatmap
@@ -194,24 +188,25 @@ def run(args):
     logging.info('AVG Run Time : {:.2f}'.format(time_total_avg))
     logging.info('Total Patch Number : {:d}'.format(patch_total))
     logging.info('AVG Patch Number : {:.2f}'.format(patch_total / len(dir)))
-
+    
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_dyn_l1",
-        "./camelyon16/configs/cnn_dyn_l1.json",
+        "./save_train/train_fix_l1",
+        "./camelyon16/configs/cnn_fix_l1.json",
         './datasets/test/prior_map_sampling_o0.25_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
     args.canvas_size = 800
     args.patch_size = 256
     args.GPU = "2"
     
-    args.assign_path = "./datasets/test/crop_split_nms_0.7_nmm_0.1_l1/results_boxes.json"
+    args.assign_path = "./datasets/test/crop_split_l1/assign.json",
     run(args)
 
 
 if __name__ == '__main__':
     main()
+    
     # if len(assign_per_img) == 0:
-    #         probs_map = np.zeros(tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]]))
-    #     else:
+    #     probs_map = np.zeros(tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]]))
+    # else:

@@ -14,6 +14,8 @@ from scipy import ndimage as nd
 from skimage import measure
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
+
+from camelyon16.baseline.tumor_mask import generate_tumor_mask
 from camelyon16.cluster.utils import NMS, NMM
 from camelyon16.cluster.probs_ops import extractor_features, compute_features
 
@@ -53,9 +55,9 @@ def parse_args():
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/train/tumor', 
-                              './datasets/train/prior_map_sampling_o0.5_l1',
-                              './datasets/train/patch_cluster_l1'])
+    args = parser.parse_args(['./datasets/test/images', 
+                              './datasets/test/prior_map_sampling_o0.25_l1',
+                              './datasets/test/patch_cluster_l1'])
     args.roi_threshold = 0.1
     args.itc_threshold = '1e0_5e2'
     args.ini_patchsize = 256
@@ -65,7 +67,8 @@ def parse_args():
     args.patch_type = 'fix'
     args.sample_type = 'whole'
     args.image_show = False
-    args.label_save = True
+    args.feature_save = True
+    args.label_save = False
     return args
 
 if __name__ == "__main__":
@@ -100,9 +103,9 @@ if __name__ == "__main__":
     elif 'test' in args.wsi_path:
         dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
 
-    for file in tqdm(sorted(dir), total=len(dir)):
+    for file in tqdm(sorted(dir)[:], total=len(dir)):
         # initialization
-        total_boxes_dyn = []
+        total_boxes_seg = []
         total_boxes_nms = []
         total_boxes_nmm = []
         filtered_properties = []
@@ -196,7 +199,8 @@ if __name__ == "__main__":
             
         # Generate patches from each tumor cell
         max_w, max_h = first_stage_map.shape
-        for i in range(len(filtered_properties)):
+        # for i in range(len(filtered_properties)):
+        for i in tqdm(range(len(filtered_properties)), total=len(filtered_properties)):
             boxes_tumor = []
             tc_X = filtered_properties[i].coords[:,0]
             tc_Y = filtered_properties[i].coords[:,1]
@@ -213,32 +217,31 @@ if __name__ == "__main__":
                     l, t, r, b = l * scale_out, t * scale_out, r * scale_out, b  * scale_out
                     boxes_tumor.append([l, t, r, b, scr])
             
-            # save fix-sized patches
-            boxes_fix = list(boxes_tumor)
-            boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_fix]
-            fix_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
-
-            # dynamic patches
-            boxes_tumor = np.array(boxes_tumor)
-            _, nms_boxes_dict = NMS(boxes_tumor, args.nms_threshold, box_shrink=True)
-            boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
-            first_nms_boxes_dict = nms_boxes_dict
-            while len(nms_boxes_dict) != len(boxes_tumor):
-                boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
-                boxes_re_nms = np.array([[i[0], i[1], i[0] + i[2], i[1] + i[3], i[4]] for i in boxes_dyn])
-                _, nms_boxes_dict = NMS(boxes_re_nms, args.nms_threshold, box_shrink=True)
-            boxes_dyn = [[i[0], i[1], i[0]+i[2], i[1]+i[3], i[4]] for i in boxes_dyn]
-
-            # save dynamic-sized patches
-            boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_dyn]
-            dyn_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
-            total_boxes_dyn += boxes_dyn
-            
             if args.patch_type == 'fix':
+                # fix patches
+                boxes_fix = list(boxes_tumor)
                 boxes_seg = np.array(boxes_fix)
+                total_boxes_seg += boxes_fix
+                # save fix-sized patches
+                boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_fix]
+                fix_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
             elif args.patch_type == 'dyn':
+                # dynamic patches
+                boxes_tumor = np.array(boxes_tumor)
+                _, nms_boxes_dict = NMS(boxes_tumor, args.nms_threshold, box_shrink=True)
+                boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
+                first_nms_boxes_dict = nms_boxes_dict
+                while len(nms_boxes_dict) != len(boxes_tumor):
+                    boxes_dyn = [i['keep'] for i in nms_boxes_dict] + [i for j in nms_boxes_dict for i in j['rege']]
+                    boxes_re_nms = np.array([[i[0], i[1], i[0] + i[2], i[1] + i[3], i[4]] for i in boxes_dyn])
+                    _, nms_boxes_dict = NMS(boxes_re_nms, args.nms_threshold, box_shrink=True)
+                boxes_dyn = [[i[0], i[1], i[0]+i[2], i[1]+i[3], i[4]] for i in boxes_dyn]
                 boxes_seg = np.array(boxes_dyn)
-
+                total_boxes_seg += boxes_dyn
+                # save dynamic-sized patches
+                boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_dyn]
+                dyn_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
+                
             # NMS
             keep_boxes_list, nms_boxes_dict = NMS(boxes_seg, args.nms_threshold)
             boxes_nms = [list(i) for i in keep_boxes_list]
@@ -249,15 +252,20 @@ if __name__ == "__main__":
             cluster_boxes_list, nmm_boxes_dict = NMM(boxes_nms, args.nmm_threshold)
             total_boxes_nmm += nmm_boxes_dict
             
-            if args.label_save:
+            if args.feature_save:
                 feature_map = cv2.resize(first_stage_map, (ext_shape[1], ext_shape[0]), interpolation=cv2.INTER_CUBIC) 
                 tc_bbox = [c * scale_feature for c in filtered_properties[i].bbox]
-
-                tumor_mask = np.load(os.path.join(os.path.dirname(args.wsi_path), \
-                                                    'tumor_mask_l{}'.format(level_output), file))
-                tc_mask = tumor_mask[tc_bbox[0]: tc_bbox[2], tc_bbox[1]: tc_bbox[3]]
-                np.save(os.path.join(save_path, 'cluster_mask', '{}_tc_{}.npy'.\
-                                        format(os.path.basename(file).split('.')[0], i)), tc_mask)
+                
+                if args.label_save:
+                    if os.path.exists(os.path.join(os.path.dirname(args.wsi_path), \
+                                                            'tumor_mask_l{}'.format(level_output), file)):
+                        tumor_mask = np.load(os.path.join(os.path.dirname(args.wsi_path), \
+                                                            'tumor_mask_l{}'.format(level_output), file))
+                    else:
+                        tumor_mask = generate_tumor_mask(file, args.wsi_path, level_output)
+                    tc_mask = tumor_mask[tc_bbox[0]: tc_bbox[2], tc_bbox[1]: tc_bbox[3]]
+                    np.save(os.path.join(save_path, 'cluster_mask', '{}_tc_{}.npy'.\
+                                            format(os.path.basename(file).split('.')[0], i)), tc_mask)
                 
                 # feature extraction
                 tc_w, tc_h = tc_bbox[2] - tc_bbox[0], tc_bbox[3] - tc_bbox[1]
@@ -304,10 +312,10 @@ if __name__ == "__main__":
             img = Image.open(os.path.join(args.prior_path, file.replace('.npy','_heat.png')))
             img_dyn_draw = ImageDraw.ImageDraw(img)
             boxes_dyn_show = [[int(i[0] * scale_show), int(i[1] * scale_show), \
-                            int(i[2] * scale_show), int(i[3] * scale_show)] for i in total_boxes_dyn]
+                            int(i[2] * scale_show), int(i[3] * scale_show)] for i in total_boxes_seg]
             for info in boxes_dyn_show:
                 img_dyn_draw.rectangle(((info[0], info[1]), (info[2], info[3])), fill=None, outline='blue', width=1)
-            img.save(os.path.join(save_path, os.path.basename(file).split('.')[0] + '_dyn.png'))
+            img.save(os.path.join(save_path, os.path.basename(file).split('.')[0] + '_seg.png'))
 
             img = Image.open(os.path.join(args.prior_path, file.replace('.npy','_heat.png')))
             img_draw = ImageDraw.ImageDraw(img)

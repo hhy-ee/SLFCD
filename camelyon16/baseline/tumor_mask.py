@@ -25,6 +25,32 @@ parser.add_argument('--vis_result', default=False, type=bool, help='whether'
                     ' to show the results')
 
 
+def generate_tumor_mask(file, wsi_path, level):
+    json_path = os.path.join(os.path.dirname(wsi_path), 'annotations/json')
+    slide = openslide.OpenSlide(os.path.join(wsi_path, file.split('.')[0] + '.tif'))
+    
+    w, h = slide.level_dimensions[level]
+    mask_tumor = np.zeros((h, w))
+    if 'tumor' in file or 'test' in file:
+        factor = (slide.level_dimensions[0][0]/w, slide.level_dimensions[0][1]/h)
+
+        with open(os.path.join(json_path, file.replace('.npy', '.json'))) as f:
+            dicts = json.load(f)
+        tumor_polygons = dicts['positive']
+
+        for tumor_polygon in tumor_polygons:
+            name = tumor_polygon["name"]
+            vertices = np.array(tumor_polygon["vertices"]) / factor
+            vertices = vertices.astype(np.int32)
+
+            cv2.fillPoly(mask_tumor, [vertices], (255))
+
+        size = tuple([int(i / 2**level) for i in slide.level_dimensions[0]])
+        mask_tumor = cv2.resize(mask_tumor.astype(np.uint8), size, interpolation=cv2.INTER_CUBIC)
+        mask_tumor = np.transpose(mask_tumor)
+        mask_tumor = mask_tumor[:] > 127
+        return mask_tumor
+
 def run(args):
 
     level_save = int(args.npy_path.split('l')[-1])

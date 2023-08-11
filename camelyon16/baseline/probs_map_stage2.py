@@ -153,7 +153,7 @@ def run(args):
     time_total = 0.0
     patch_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
-    for file in sorted(dir)[:40]:
+    for file in sorted(dir)[:]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
         #           'save_roi_th_0.01_itc_th_1e0_5e2_edge_fixmodel_fixsize1x256_l{}'.format(level_save), file)):
         #     continue
@@ -220,10 +220,10 @@ def main():
         './datasets/test/dens_map_sampling_2s_l6'])
     args.canvas_size = 256
     args.patch_size = 256
-    args.GPU = "2"
+    args.GPU = "0"
     
     args.roi_threshold = 0.1
-    args.itc_threshold = '1e0_5e2'
+    args.itc_threshold = '1e2_5e2'
     args.sample_type = 'edge'
     run(args)
 
