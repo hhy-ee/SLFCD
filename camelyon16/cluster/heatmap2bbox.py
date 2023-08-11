@@ -201,7 +201,7 @@ if __name__ == "__main__":
                     l, r = x_center - patch_size // 2, x_center + patch_size // 2
                     t, b = y_center - patch_size // 2, y_center + patch_size // 2
                     pos_idx = np.where(first_stage_map[l: r, t: b] / 255 > args.roi_threshold)
-                    scr = first_stage_map[l: r, t: b][pos_idx].mean()
+                    scr = first_stage_map[l: r, t: b][pos_idx].mean() if len(pos_idx[0]) > 0 else 0
                     l, t, r, b = l * scale_out, t * scale_out, r * scale_out, b  * scale_out
                     boxes_tumor.append([l, t, r, b, scr])
             
