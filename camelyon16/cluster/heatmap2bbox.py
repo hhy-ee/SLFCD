@@ -328,7 +328,7 @@ if __name__ == "__main__":
     num_child_patches = np.array([len(i) for i in dyn_boxes_dict.values()]).sum()
     mean_child_size = np.array([j['keep'][2] for i in dyn_boxes_dict.values() for j in i]).mean()
     num_cluster_patches = np.array([len(i) for i in final_boxes_dict.values()]).sum()
-    mean_cluster_size = np.array([j['cluster'][2:4] for i in final_boxes_dict.values() for j in i]).mean()
+    mean_cluster_size = np.array([j['cluster'][2:4] for i in final_boxes_dict.values() for j in i if 'cluster' in j.keys()]).mean()
 
     print('Generate total {} child patches with mean size {:.1f}'.format(num_child_patches, mean_child_size))
     print('Generate total {} cluster patches with mean size {:.1f}'.format(num_cluster_patches, mean_cluster_size))
