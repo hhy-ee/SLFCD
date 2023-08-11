@@ -55,9 +55,9 @@ def parse_args():
 
     args = parser.parse_args(['./datasets/train/tumor', 
                               './datasets/train/prior_map_sampling_o0.5_l1',
-                              './datasets/train/crop_split_nms_1.0_nmm_0.5_l1'])
+                              './datasets/train/patch_cluster_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = '1e0_2e3'
+    args.itc_threshold = '1e0_5e2'
     args.ini_patchsize = 256
     args.nms_threshold = 1.0
     args.nmm_threshold = 0.5
@@ -86,6 +86,14 @@ if __name__ == "__main__":
     fix_boxes_dict = {}
     dyn_boxes_dict = {}
     final_boxes_dict ={}
+
+    save_path = os.path.join(args.output_path, 'cluster_roi_th_{}_itc_th_{}_nms_{}_nmm_{}_{}_{}size_l{}'.format(
+                args.roi_threshold , args.itc_threshold, args.nms_threshold, args.nmm_threshold, args.sample_type,\
+                args.patch_type, level_output))
+    if not os.path.exists(save_path):
+        os.mkdir(save_path)
+    if not os.path.exists(os.path.join(save_path, 'cluster_mask')):
+        os.mkdir(os.path.join(save_path, 'cluster_mask'))
 
     if 'train' in args.wsi_path:
         dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tumor_mask_l6'))
@@ -141,7 +149,7 @@ if __name__ == "__main__":
                 l, t, r, b  = filtered_properties[i].bbox
                 img_draw.rectangle(((l, t), (r, b)), fill=None, outline='blue', width=1)
             heat_img_rect = np.asarray(img.resize(prior_shape))
-            cv2.imwrite(os.path.join(args.output_path, file.split('.')[0] + '_ctc.png'), heat_img_rect)
+            cv2.imwrite(os.path.join(save_path, file.split('.')[0] + '_ctc.png'), heat_img_rect)
             
             distance, coord = nd.distance_transform_edt(filled_mask, return_indices=True)
             edge_X, edge_Y = np.where(distance == 1)
@@ -149,7 +157,7 @@ if __name__ == "__main__":
             prior_heat = cv2.resize(prior_heat, prior_shape, interpolation=cv2.INTER_CUBIC)
             prior_heat[edge_Y, edge_X, :] = [0, 255, 0]
             prior_heat = cv2.resize(prior_heat, show_shape, interpolation=cv2.INTER_CUBIC)
-            cv2.imwrite(os.path.join(args.output_path, file.split('.')[0] + '_edge.png'), prior_heat)
+            cv2.imwrite(os.path.join(save_path, file.split('.')[0] + '_edge.png'), prior_heat)
             
             # plot 
             conf_map = np.zeros(filled_image.shape).astype(np.uint8)
@@ -163,7 +171,7 @@ if __name__ == "__main__":
             conf_map_rgb = cv2.applyColorMap(conf_map_res, cv2.COLORMAP_JET)
             conf_map_rgb = cv2.cvtColor(conf_map_rgb, cv2.COLOR_BGR2RGB)
             heat_img = cv2.addWeighted(conf_map_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
-            cv2.imwrite(os.path.join(args.output_path, file.split('.')[0] + '_conf.png'), heat_img)
+            cv2.imwrite(os.path.join(save_path, file.split('.')[0] + '_conf.png'), heat_img)
         
         # Sample center point from specialized region of tumor cell
         if not filled_mask.any():
@@ -248,7 +256,7 @@ if __name__ == "__main__":
                 tumor_mask = np.load(os.path.join(os.path.dirname(args.wsi_path), \
                                                     'tumor_mask_l{}'.format(level_output), file))
                 tc_mask = tumor_mask[tc_bbox[0]: tc_bbox[2], tc_bbox[1]: tc_bbox[3]]
-                np.save(os.path.join(args.output_path, 'cluster_mask', '{}_tc_{}.npy'.\
+                np.save(os.path.join(save_path, 'cluster_mask', '{}_tc_{}.npy'.\
                                         format(os.path.basename(file).split('.')[0], i)), tc_mask)
                 
                 # feature extraction
@@ -291,7 +299,7 @@ if __name__ == "__main__":
                             int(i[2] * scale_show), int(i[3] * scale_show)] for i in total_boxes_nms]
             for info in boxes_nms_show:
                 img_nms_draw.rectangle(((info[0], info[1]), (info[2], info[3])), fill=None, outline='blue', width=1)
-            img.save(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_nms.png'))
+            img.save(os.path.join(save_path, os.path.basename(file).split('.')[0] + '_nms.png'))
             
             img = Image.open(os.path.join(args.prior_path, file.replace('.npy','_heat.png')))
             img_dyn_draw = ImageDraw.ImageDraw(img)
@@ -299,7 +307,7 @@ if __name__ == "__main__":
                             int(i[2] * scale_show), int(i[3] * scale_show)] for i in total_boxes_dyn]
             for info in boxes_dyn_show:
                 img_dyn_draw.rectangle(((info[0], info[1]), (info[2], info[3])), fill=None, outline='blue', width=1)
-            img.save(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_dyn.png'))
+            img.save(os.path.join(save_path, os.path.basename(file).split('.')[0] + '_dyn.png'))
 
             img = Image.open(os.path.join(args.prior_path, file.replace('.npy','_heat.png')))
             img_draw = ImageDraw.ImageDraw(img)
@@ -315,7 +323,7 @@ if __name__ == "__main__":
                                     ((clu_box[0]-1+clu_box[2]) * scale_show, \
                                     (clu_box[1]-1+clu_box[3]) * scale_show)), \
                                     fill=None, outline='green', width=1)
-            img.save(os.path.join(args.output_path, os.path.basename(file).split('.')[0] + '_nmm.png'))
+            img.save(os.path.join(save_path, os.path.basename(file).split('.')[0] + '_nmm.png'))
 
     num_child_patches = np.array([len(i) for i in dyn_boxes_dict.values()]).sum()
     mean_child_size = np.array([j['keep'][2] for i in dyn_boxes_dict.values() for j in i]).mean()
@@ -325,13 +333,13 @@ if __name__ == "__main__":
     print('Generate total {} child patches with mean size {:.1f}'.format(num_child_patches, mean_child_size))
     print('Generate total {} cluster patches with mean size {:.1f}'.format(num_cluster_patches, mean_cluster_size))
     
-    with open(os.path.join(args.output_path, 'results.json'), 'w') as result_file:
+    with open(os.path.join(save_path, 'results.json'), 'w') as result_file:
         json.dump(final_boxes_dict, result_file)
     
     dyn_boxes_dict.update({'data_info': {'th_nms': args.nms_threshold, 'th_nmm': args.nmm_threshold,
                                             'th_roi': args.roi_threshold, 'th_itc': args.itc_threshold,
                                             'patch_type': args.patch_type, 'sample_type': args.sample_type}})
-    with open(os.path.join(args.output_path, 'results_boxes.json'), 'w') as result_file:
+    with open(os.path.join(save_path, 'results_boxes.json'), 'w') as result_file:
         json.dump(dyn_boxes_dict, result_file)
 
 
