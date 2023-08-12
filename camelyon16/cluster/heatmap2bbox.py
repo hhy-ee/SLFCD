@@ -59,7 +59,7 @@ def parse_args():
                               './datasets/test/prior_map_sampling_o0.25_l1',
                               './datasets/test/patch_cluster_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = '1e0_5e2'
+    args.itc_threshold = '1e2_1e3'
     args.ini_patchsize = 256
     args.nms_threshold = 1.0
     args.nmm_threshold = 0.5
@@ -67,7 +67,7 @@ def parse_args():
     args.patch_type = 'fix'
     args.sample_type = 'whole'
     args.image_show = False
-    args.feature_save = True
+    args.feature_save = False
     args.label_save = False
     return args
 
@@ -86,8 +86,7 @@ if __name__ == "__main__":
     scale_out = 2 ** (level_input - level_output)
     scale_feature = 2 ** (level_prior - level_output)
     
-    fix_boxes_dict = {}
-    dyn_boxes_dict = {}
+    seg_boxes_dict = {}
     final_boxes_dict ={}
 
     save_path = os.path.join(args.output_path, 'cluster_roi_th_{}_itc_th_{}_nms_{}_nmm_{}_{}_{}size_l{}'.format(
@@ -224,7 +223,7 @@ if __name__ == "__main__":
                 total_boxes_seg += boxes_fix
                 # save fix-sized patches
                 boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_fix]
-                fix_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
+                seg_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
             elif args.patch_type == 'dyn':
                 # dynamic patches
                 boxes_tumor = np.array(boxes_tumor)
@@ -240,7 +239,7 @@ if __name__ == "__main__":
                 total_boxes_seg += boxes_dyn
                 # save dynamic-sized patches
                 boxes_save = [{'keep': [int(i[0]), int(i[1]), int(i[2] - i[0]), int(i[3] - i[1])]} for i in boxes_dyn]
-                dyn_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
+                seg_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): boxes_save})
                 
             # NMS
             keep_boxes_list, nms_boxes_dict = NMS(boxes_seg, args.nms_threshold)
@@ -333,8 +332,8 @@ if __name__ == "__main__":
                                     fill=None, outline='green', width=1)
             img.save(os.path.join(save_path, os.path.basename(file).split('.')[0] + '_nmm.png'))
 
-    num_child_patches = np.array([len(i) for i in dyn_boxes_dict.values()]).sum()
-    mean_child_size = np.array([j['keep'][2] for i in dyn_boxes_dict.values() for j in i]).mean()
+    num_child_patches = np.array([len(i) for i in seg_boxes_dict.values()]).sum()
+    mean_child_size = np.array([j['keep'][2] for i in seg_boxes_dict.values() for j in i]).mean()
     num_cluster_patches = np.array([len(i) for i in final_boxes_dict.values()]).sum()
     mean_cluster_size = np.array([j['cluster'][2:4] for i in final_boxes_dict.values() for j in i if 'cluster' in j.keys()]).mean()
 
@@ -344,11 +343,11 @@ if __name__ == "__main__":
     with open(os.path.join(save_path, 'results.json'), 'w') as result_file:
         json.dump(final_boxes_dict, result_file)
     
-    dyn_boxes_dict.update({'data_info': {'th_nms': args.nms_threshold, 'th_nmm': args.nmm_threshold,
+    seg_boxes_dict.update({'data_info': {'th_nms': args.nms_threshold, 'th_nmm': args.nmm_threshold,
                                             'th_roi': args.roi_threshold, 'th_itc': args.itc_threshold,
                                             'patch_type': args.patch_type, 'sample_type': args.sample_type}})
     with open(os.path.join(save_path, 'results_boxes.json'), 'w') as result_file:
-        json.dump(dyn_boxes_dict, result_file)
+        json.dump(seg_boxes_dict, result_file)
 
 
 
