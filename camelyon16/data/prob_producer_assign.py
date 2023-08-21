@@ -1,84 +1,81 @@
-import os
-import sys
 import cv2
 import PIL
 import numpy as np
+from scipy import ndimage as nd
 from torch.utils.data import Dataset
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 
 class WSIPatchDataset(Dataset):
 
-    def __init__(self, slide, level_ckpt, assign, image_size=256,
-                 normalize=True, flip='NONE', rotate='NONE'):
+    def __init__(self, slide, prior, level_sample, level_ckpt, args, file,
+                 image_size=256, normalize=True, flip='NONE', rotate='NONE'):
         self._slide = slide
+        self._prior = prior
+        self._level_sample = level_sample
         self._level_ckpt = level_ckpt
-        self._assign = assign
+        self._args = args
+        self._file = file
+        self._patch_size = image_size
         self._normalize = normalize
         self._flip = flip
         self._rotate = rotate
         self._pre_process()
 
     def _pre_process(self):
-        self._canvas = []
-        max_box_len = max([len(item['render_seq']) for item in self._assign])
-        for assign in self._assign:
-            boxes = np.zeros((max_box_len, 4), dtype=np.int)
-            moved_boxes = np.zeros((max_box_len, 4), dtype=np.int)
-            canvas = np.zeros((max_box_len, 8), dtype=np.int)
-            for idx in assign['render_seq']:
-                box = assign['origin_cluster_box'][idx]
-                box[2] = max(box[2], box[0] + 1)
-                box[3] = max(box[3], box[1] + 1)
-                moved_box = assign['moved_cluster_box'][idx]
-                o_x1, o_y1, o_x2, o_y2 = box
-                w = o_x2 - o_x1
-                h = o_y2 - o_y1
-                o_s_x1 = int(o_x1 * self._slide.level_downsamples[self._level_ckpt])
-                o_s_y1 = int(o_y1 * self._slide.level_downsamples[self._level_ckpt])
-                x1, y1, x2, y2 = moved_box
-                m_w = x2 - x1
-                m_h = y2 - y1
-                int_w = max(1, int(m_w))
-                int_h = max(1, int(m_h))
-
-                boxes[idx, :] = box
-                moved_boxes[idx, :] = [int(x1), int(y1), int(x1) + int_w, int(y1) + int_h]
-                canvas[idx, :] = [o_s_x1, o_s_y1, w, h, int_w, int_h, assign['bin_width'], assign['bin_height']]
-
-            self._canvas.append([canvas, boxes, moved_boxes])
-        self._idcs_num = len(self._canvas)
+        self._image_size = tuple([int(i / 2**self._level_ckpt) for i in self._slide.level_dimensions[0]])
+        self.prior_map, self.render_seq, self.origin_cluster, self.moved_cluster, self.bin_size = self._prior
+        
+        self._canvas_size = self.bin_size
+        
+        self._idcs_num = len( self.render_seq)
 
     def __len__(self):
         return self._idcs_num
 
     def __getitem__(self, idx):
-        canvas, boxes, moved_boxes = self._canvas[idx]
-        canvas = canvas[:np.where(canvas[:,-1] != 0)[0][-1] + 1]
-        img = np.zeros((canvas[0, 6], canvas[0, 7], 3))
-        for i in range(len(canvas)):
-            o_s_x1, o_s_y1, w, h, int_w, int_h = canvas[i, :6] 
-            patch = self._slide.read_region((o_s_x1, o_s_y1), self._level_ckpt, (w, h)).convert('RGB')
-            patch = np.asarray(patch).transpose((1, 0, 2))
-            patch = cv2.resize(patch, (int_h, int_w), interpolation=cv2.INTER_CUBIC)
-            img[moved_boxes[i, 0]: moved_boxes[i, 2], moved_boxes[i, 1]: moved_boxes[i, 3]] = patch
+        canvas = np.zeros((3, self._canvas_size[idx], self._canvas_size[idx]), dtype=np.float32)
+        
+        img_box, canvas_box, patch_box = [], [], []
+        for p_idx in self.render_seq[idx]:
+            box = self.origin_cluster[idx][p_idx]
+            box[2], box[3] = max(box[2], box[0] + 1), max(box[3], box[1] + 1)
+            x_mask, y_mask, x_size, y_size = box[0], box[1], box[2]-box[0], box[3]-box[1]
+            
+            x = int(x_mask * self._slide.level_downsamples[self._level_ckpt])
+            y = int(y_mask * self._slide.level_downsamples[self._level_ckpt])
+            
+            moved_box = self.moved_cluster[idx][p_idx]
+            x_start, y_start, x_end, y_end = moved_box
+            x_patch_size = max(1, int(x_end - x_start))
+            y_patch_size = max(1, int(y_end - y_start))
+            x_start, y_start = int(x_start), int(y_start), 
+            x_end, y_end = x_start + x_patch_size, y_start + y_patch_size
+            
+            img = self._slide.read_region(
+                    (x, y), self._level_ckpt, (x_size, y_size)).convert('RGB')
+            img = img.resize((x_patch_size, y_patch_size))
+            
+            if self._flip == 'FLIP_LEFT_RIGHT':
+                    img = img.transpose(PIL.Image.FLIP_LEFT_RIGHT)
 
-        if self._flip == 'FLIP_LEFT_RIGHT':
-            img = img.transpose(PIL.Image.FLIP_LEFT_RIGHT)
+            if self._rotate == 'ROTATE_90':
+                img = img.transpose(PIL.Image.ROTATE_90)
 
-        if self._rotate == 'ROTATE_90':
-            img = img.transpose(PIL.Image.ROTATE_90)
+            if self._rotate == 'ROTATE_180':
+                img = img.transpose(PIL.Image.ROTATE_180)
 
-        if self._rotate == 'ROTATE_180':
-            img = img.transpose(PIL.Image.ROTATE_180)
+            if self._rotate == 'ROTATE_270':
+                img = img.transpose(PIL.Image.ROTATE_270)
 
-        if self._rotate == 'ROTATE_270':
-            img = img.transpose(PIL.Image.ROTATE_270)
-
-            # PIL image:   H x W x C
-            # torch image: C X H X W
-        img = img.astype("float32").transpose(2, 0, 1)
-
+            # PIL image:   H x W x C, torch image: C X H X W
+            img = np.array(img, dtype=np.float32).transpose((2, 1, 0))
+            
+            canvas[:, x_start: x_end, y_start: y_end] = img
+            
+            left, top, right, bot = box
+            img_box.append((left, top, right, bot, x_size, y_size))
+            canvas_box.append((x_start, y_start, x_end, y_end))
+            
         if self._normalize:
-            img = (img - 128.0) / 128.0
+            canvas = (canvas - 128.0) / 128.0
 
-        return (img, np.array(boxes), np.array(moved_boxes))
+        return (canvas, img_box, canvas_box)

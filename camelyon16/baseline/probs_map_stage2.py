@@ -89,12 +89,12 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
             patch = [[(item / resolution).to(torch.int) for item in list] for list in patch]
             for bs in range(len(probs)):
                 for pt in range(len(box)):
-                    b_l, b_t, b_r, r_b = box[pt][0][bs], box[pt][1][bs], box[pt][2][bs], box[pt][3][bs]
+                    b_l, b_t, b_r, b_b = box[pt][0][bs], box[pt][1][bs], box[pt][2][bs], box[pt][3][bs]
                     c_l, c_t, c_r, c_b = canvas[pt][0][bs], canvas[pt][1][bs], canvas[pt][2][bs], canvas[pt][3][bs]
                     p_l, p_t, p_r, p_b, p_s = patch[pt][0][bs], patch[pt][1][bs], patch[pt][2][bs], patch[pt][3][bs], patch[pt][4][bs]
                     prob = transform.resize(probs[bs, 0, c_l: c_r, c_t: c_b], (p_s, p_s))
-                    counter[b_l: b_r, b_t: r_b] += 1
-                    probs_map[b_l: b_r, b_t: r_b] += prob[p_l: p_r, p_t: p_b]
+                    counter[b_l: b_r, b_t: b_b] += 1
+                    probs_map[b_l: b_r, b_t: b_b] += prob[p_l: p_r, p_t: p_b]
             
             count += 1
             time_spent = time.time() - time_now
@@ -153,7 +153,7 @@ def run(args):
     time_total = 0.0
     patch_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
-    for file in sorted(dir)[:]:
+    for file in sorted(dir)[:40]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
         #           'save_roi_th_0.01_itc_th_1e0_5e2_edge_fixmodel_fixsize1x256_l{}'.format(level_save), file)):
         #     continue
@@ -214,17 +214,17 @@ def run(args):
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_fix_l1",
-        "./camelyon16/configs/cnn_fix_l1.json",
+        "./save_train/train_dyn_l1",
+        "./camelyon16/configs/cnn_dyn_l1.json",
         './datasets/test/prior_map_sampling_o0.25_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
-    args.canvas_size = 256
+    args.canvas_size = 800
     args.patch_size = 256
-    args.GPU = "0"
+    args.GPU = "2"
     
     args.roi_threshold = 0.1
-    args.itc_threshold = '1e2_5e2'
-    args.sample_type = 'edge'
+    args.itc_threshold = '1e0_1e3'
+    args.sample_type = 'whole'
     run(args)
 
 

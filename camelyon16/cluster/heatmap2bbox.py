@@ -59,15 +59,15 @@ def parse_args():
                               './datasets/test/prior_map_sampling_o0.25_l1',
                               './datasets/test/patch_cluster_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = '1e2_1e3'
+    args.itc_threshold = '1e0_5e2'
     args.ini_patchsize = 256
     args.nms_threshold = 1.0
     args.nmm_threshold = 0.5
     args.fea_threshold = 0.5
     args.patch_type = 'fix'
-    args.sample_type = 'whole'
+    args.sample_type = 'edge'
     args.image_show = False
-    args.feature_save = False
+    args.feature_save = True
     args.label_save = False
     return args
 

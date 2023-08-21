@@ -70,7 +70,12 @@ class patch_point_in_mask_gen(object):
                                                               self.number // 10, replace=False), :]
         
         sampled_points = np.concatenate((sampled_points_tumor, sampled_points_normal, sampled_points_ground), axis=0)
-
+        
+        # sampled_points_normal = centre_points_normal[np.random.choice(centre_points_normal.shape[0],
+        #                                                                self.number, replace=False), :]
+        
+        # sampled_points = np.concatenate((sampled_points_tumor, sampled_points_normal), axis=0)
+        
         return (sampled_points * 2 ** (mask_level-self.level)).astype(np.int32)
 
 
@@ -95,18 +100,21 @@ def run(args):
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    args = parser.parse_args([
-        "./datasets/train/",
-        "./datasets/train/tumor_mask_l6",
-        "./datasets/train/tissue_mask_l6",
-        "./datasets/train/sample_gen_l1",
-        '1000'])
+    
     # args = parser.parse_args([
     #     "./datasets/train/",
     #     "./datasets/train/tumor_mask_l5",
     #     "./datasets/train/tissue_mask_l5",
-    #     "./datasets/train/sample_gen_l0",
-    #     '2000'])
+    #     "./datasets/train/sample_gen_l1",
+    #     '4000'])
+    # run(args)
+    
+    args = parser.parse_args([
+        "./datasets/train/",
+        "./datasets/train/tumor_mask_l5",
+        "./datasets/train/tissue_mask_l5",
+        "./datasets/train/sample_gen_l0",
+        '8000'])
     run(args)
 
 

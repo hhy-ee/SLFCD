@@ -1,6 +1,6 @@
 {
     "model": "segmentation",
-    "batch_size": 1,
+    "batch_size": 16,
     "image_size": 256,
     "crop_size": 256,
     "normalize": "True",

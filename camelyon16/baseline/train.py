@@ -210,19 +210,19 @@ def run(args):
 def main():
     logging.basicConfig(level=logging.INFO)
 
-    # args = parser.parse_args([
-    #     "./camelyon16/configs/cnn_fix_l1.json",
-    #     "./save_train/train_fix_l1"])
-    # args.device_ids = '0'
-    # args.init_mode = 'resume'
-    # run(args)
-    
     args = parser.parse_args([
-        "./camelyon16/configs/cnn_fix_l0.json",
-        "./save_train/train_fix_l0"])
-    args.device_ids = '3'
-    args.init_mode = ''
+        "./camelyon16/configs/cnn_dyn_l1.json",
+        "./save_train/train_dyn_nobg_l1"])
+    args.device_ids = '2'
+    args.init_mode = 'scatch'
     run(args)
+    
+    # args = parser.parse_args([
+    #     "./camelyon16/configs/cnn_fix_l0.json",
+    #     "./save_train/train_fix_l0"])
+    # args.device_ids = '3'
+    # args.init_mode = ''
+    # run(args)
 
 if __name__ == '__main__':
     main()

@@ -5,6 +5,7 @@ import logging
 import time
 import json
 import cv2
+import random
 import openslide
 import numpy as np
 
@@ -38,7 +39,8 @@ def process(opts, slide, level, tumor_mask=None):
     if args.patch_mode == 'fix':
         patch_size = args.patch_size
     elif args.patch_mode == 'dyn':
-        patch_size = np.random.randint(2,16) * 32
+        patch_size = np.random.randint(8,12) * 32
+        # patch_size = random.choices([256, 288, 320, 352, 384], weights=(80, 5, 5, 5, 5))[0]
         
     l = int(x_center) - patch_size // 2
     t = int(y_center) - patch_size // 2
@@ -70,10 +72,10 @@ def process(opts, slide, level, tumor_mask=None):
         mask_tumor.save(os.path.join(os.path.join(args.patch_path, pid), str(i) + '_label.png'))
 
     # # generate heat map
-    mask_tumor = (np.asarray(mask_tumor) * 255).astype(np.uint8)
-    mask_tumor = Image.fromarray(cv2.applyColorMap(mask_tumor, cv2.COLORMAP_JET))
-    heat_img = Image.blend(img_patch, mask_tumor, 0.3)
-    heat_img.save(os.path.join(os.path.join(args.patch_path, pid), str(i) + '_heat.png'))
+    # mask_tumor = (np.asarray(mask_tumor) * 255).astype(np.uint8)
+    # mask_tumor = Image.fromarray(cv2.applyColorMap(mask_tumor, cv2.COLORMAP_JET))
+    # heat_img = Image.blend(img_patch, mask_tumor, 0.3)
+    # heat_img.save(os.path.join(os.path.join(args.patch_path, pid), str(i) + '_heat.png'))
 
     global lock
     global count
@@ -90,8 +92,6 @@ def run(args):
     logging.basicConfig(level=logging.INFO)
     dir = os.listdir(args.coords_path)
     for file in tqdm(sorted(dir), total=len(dir)):
-        if not 'tumor' in file:
-            continue
         if not os.path.exists(os.path.join(args.patch_path, file.split('.')[0])):
             os.mkdir(os.path.join(args.patch_path, file.split('.')[0]))
             copyfile(os.path.join(args.coords_path, file.split('.')[0] + '.txt') , \
@@ -121,17 +121,17 @@ def main():
     # args = parser.parse_args([
     #     "./datasets/train",
     #     "./datasets/train/sample_gen_l1",
-    #     "./datasets/train/patch_gen_fix_l1"])
+    #     "./datasets/train/patch_gen_dyn_l1"])
     # args.patch_size = 256
-    # args.patch_mode = 'fix'
+    # args.patch_mode = 'dyn'
     # run(args)
     
     args = parser.parse_args([
         "./datasets/train",
         "./datasets/train/sample_gen_l0",
-        "./datasets/train/patch_gen_fix_l0"])
+        "./datasets/train/patch_gen_dyn_l0"])
     args.patch_size = 256
-    args.patch_mode = 'fix'
+    args.patch_mode = 'dyn'
     run(args)
 
 if __name__ == '__main__':

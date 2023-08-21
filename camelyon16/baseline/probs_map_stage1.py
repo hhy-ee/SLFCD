@@ -132,7 +132,7 @@ def run(args):
     time_total = 0.0
     patch_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_tissue)))
-    for file in sorted(dir)[80:]:
+    for file in sorted(dir)[:40]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
@@ -187,13 +187,14 @@ def main():
     # args.GPU = "0"
     # run(args)
     
+    # ckpt路径可能有改动
     args = parser.parse_args([
         "/media/ps/passport2/hhy/camelyon16/test/images",
-        "./save_train/train_dyn_l0",
-        "./camelyon16/configs/cnn_dyn_l0.json",
-        '/media/ps/passport2/hhy/camelyon16/test/pengjq_test/prior_map_sampling_o0.25_l0'])
+        "./save_train/train_fix_l0",
+        "./camelyon16/configs/cnn_fix_l0.json",
+        '/media/ps/passport2/hhy/camelyon16/test/pengjq_test/prior_map_sampling_o0.25_l0/epoch_14_l0'])
     args.overlap = 0.25
-    args.GPU = "0"
+    args.GPU = "1"
     run(args)
 
 
