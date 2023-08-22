@@ -10,6 +10,9 @@ from skimage import transform
 import numpy as np
 import torch
 import openslide
+
+from PIL import Image
+from PIL import ImageDraw
 from scipy import ndimage as nd
 from skimage import measure
 from torch.utils.data import DataLoader
@@ -146,8 +149,9 @@ def run(args):
 
     time_total = 0.0
     patch_total = 0
+    canvas_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
-    for file in sorted(dir)[:40]:
+    for file in sorted(dir)[:]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
         #           'save_roi_th_0.01_itc_th_1e0_5e2_edge_fixmodel_fixsize1x256_l{}'.format(level_save), file)):
         #     continue
@@ -161,37 +165,30 @@ def run(args):
         origin_cluster = [item['origin_cluster_box'] for item in assign if file.split('.')[0] in item['file_name']]
         moved_cluster = [item['moved_cluster_box'] for item in assign if file.split('.')[0] in item['file_name']]
         bin_size = [item['bin_width'] for item in assign if file.split('.')[0] in item['file_name']]
-        # generate prior
-        prior = (prior_map, render_seq, origin_cluster, moved_cluster, bin_size)
         
-        # calculate heatmap & runtime
-        dataloader = make_dataloader(
-            args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
-        patch_total += dataloader.dataset._idcs_num
-        # probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
-        # time_total += time_network
+        # plot
+        scale_show = 2 ** (level_ckpt - level_show)
+        total_boxes = [patch for canvas in origin_cluster for patch in canvas if patch[0] != 0]
+        total_boxes_array = np.array(total_boxes)
+        width, height = total_boxes_array[:,2] - total_boxes_array[:,0], total_boxes_array[:,3] - total_boxes_array[:,1]
+        img = Image.open(os.path.join(args.prior_path, file.replace('.npy','_heat.png')))
+        img_dyn_draw = ImageDraw.ImageDraw(img)
+        boxes_show = [[int(i[0] * scale_show), int(i[1] * scale_show), \
+                        int(i[2] * scale_show), int(i[3] * scale_show)] for i in total_boxes]
+        for i in range(len(boxes_show)):
+            info = boxes_show[i]
+            if width[i] == 256:
+                img_dyn_draw.rectangle(((info[0], info[1]), (info[2], info[3])), fill=None, outline='blue', width=1)
+            else:
+                img_dyn_draw.rectangle(((info[0], info[1]), (info[2], info[3])), fill=None, outline='green', width=1)
+        img.save(os.path.join('/home/ps/hhy/slfcd/datasets/test/result', os.path.basename(file).split('.')[0] + '_box.png'))
         
-        # # save heatmap
-        # probs_map = (probs_map * 255).astype(np.uint8)
-        # shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
-        # probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
-        # np.save(os.path.join(save_path, file), probs_map)
-
-        # # visulize heatmap
-        # img_rgb = slide.read_region((0, 0), level_show, \
-        #                     tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
-        # img_rgb = np.asarray(img_rgb).transpose((1,0,2))
-        # probs_map = cv2.resize(probs_map, (img_rgb.shape[1], img_rgb.shape[0]), interpolation=cv2.INTER_CUBIC)
-        # probs_img_rgb = cv2.applyColorMap(probs_map, cv2.COLORMAP_JET)
-        # probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
-        # heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
-        # cv2.imwrite(os.path.join(save_path, file.split('.')[0] + '_heat.png'), heat_img)
-
-    time_total_avg = time_total / len(dir)
-    logging.info('AVG Run Time : {:.2f}'.format(time_total_avg))
+        patch_total += len(total_boxes)
+        canvas_total += len(origin_cluster)
+        
     logging.info('Total Patch Number : {:d}'.format(patch_total))
-    logging.info('AVG Patch Number : {:.2f}'.format(patch_total / len(dir)))
-
+    logging.info('Total Canvas Number : {:d}'.format(canvas_total))
+    
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
@@ -201,7 +198,7 @@ def main():
         './datasets/test/dens_map_sampling_2s_l6'])
     args.GPU = "1"
     
-    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e2_1e3_nms_1.0_nmm_0.5_whole_fixsize_l1/testset_assign_2.json"
+    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e3_nms_1.0_nmm_0.5_whole_fixsize_l1/testset_assign_3.json"
     run(args)
 
 

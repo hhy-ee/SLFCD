@@ -138,10 +138,13 @@ def run(args):
     
     with open(args.assign_path, 'r') as f_assign:
         assign = json.load(f_assign)
-
+        
+    with open(os.path.join(os.path.dirname(args.assign_path), 'results.json'), 'r') as f_cluster:
+        cluster = json.load(f_cluster)
+        
     info = assign['data_info']
     save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                'save_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_dynmodel_{}size_l{}'.format(info['th_roi'], \
+                'save_pack_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_dynmodel_{}size_l{}'.format(info['th_roi'], \
                 info['th_itc'], args.canvas_size, args.patch_size, info['sample_type'], info['patch_type'], level_save))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
@@ -168,8 +171,11 @@ def run(args):
         # Get patches from assignment files
         file_keys = [key for key in assign.keys() if file.split('.')[0] in key]
         assign_per_img = [box for key in file_keys for box in assign[key]]
+        parent_per_img = [{'keep': box['cluster']} for key in file_keys for box in cluster[key][1:]]
+        child_per_img = [{'keep': child['cluster']} for key in file_keys for box in cluster[key][1:] for child in box['child']]
+        cluster_per_img = parent_per_img + child_per_img
         # generate prior
-        prior = (prior_map, assign_per_img)
+        prior = (prior_map, cluster_per_img)
         
         # calculate heatmap & runtime
         dataloader = make_dataloader(
@@ -203,16 +209,16 @@ def run(args):
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_fix_l1",
-        "./camelyon16/configs/cnn_fix_l1.json",
+        "./save_train/train_dyn_l1",
+        "./camelyon16/configs/cnn_dyn_l1.json",
         './datasets/test/prior_map_sampling_o0.25_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
     args.canvas_size = 800
     args.patch_size = 256
     args.fill_in = True
-    args.GPU = "0"
+    args.GPU = "1"
     
-    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_5e2_nms_1.0_nmm_0.5_edge_fixsize_384_l1/results_boxes.json"
+    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e3_nms_1.0_nmm_0.5_whole_fixsize_l1/results_boxes.json"
     run(args)
 
 

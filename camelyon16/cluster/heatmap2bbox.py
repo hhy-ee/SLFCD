@@ -67,7 +67,7 @@ def parse_args():
     args.patch_type = 'fix'
     args.sample_type = 'edge'
     args.image_show = False
-    args.feature_save = True
+    args.feature_save = False
     args.label_save = False
     return args
 

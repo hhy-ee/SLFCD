@@ -153,7 +153,7 @@ def run(args):
     time_total = 0.0
     patch_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
-    for file in sorted(dir)[:40]:
+    for file in sorted(dir)[80:]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
         #           'save_roi_th_0.01_itc_th_1e0_5e2_edge_fixmodel_fixsize1x256_l{}'.format(level_save), file)):
         #     continue
@@ -224,7 +224,7 @@ def main():
     
     args.roi_threshold = 0.1
     args.itc_threshold = '1e0_1e3'
-    args.sample_type = 'whole'
+    args.sample_type = 'edge'
     run(args)
 
 

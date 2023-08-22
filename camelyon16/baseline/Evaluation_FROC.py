@@ -228,7 +228,7 @@ if __name__ == "__main__":
     wsi_folder = 'datasets/test/images'
     mask_folder = 'datasets/test/tumor_mask_l5'
     # result_folder = 'datasets/test/prior_map_sampling_dyn_nobg_o0.25_l1'
-    result_folder = 'datasets/test/dens_map_sampling_2s_l6/model_prior_o0.25_l1/cluster_roi_th_0.1_itc_th_1e0_1e3_nms_1.0_nmm_0.5_whole_fixsize_l1_testset_assign_1'
+    result_folder = 'datasets/test/dens_map_sampling_2s_l6/model_prior_o0.25_l1/cluster_roi_th_0.1_itc_th_1e0_1e3_nms_1.0_nmm_0.5_whole_fixsize_l1_fixmodel_testset_assign_3'
     threshold = 0.5
     
     # default setting

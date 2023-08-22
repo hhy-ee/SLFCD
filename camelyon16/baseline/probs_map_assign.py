@@ -133,7 +133,7 @@ def run(args):
         assign = json.load(f_assign)
         
     save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                    '{}_{}'.format(args.assign_path.split('/')[-2], args.assign_path.split('/')[-1].split('.')[0]))
+                    '{}_{}_{}'.format(args.assign_path.split('/')[-2], 'dynmodel', args.assign_path.split('/')[-1].split('.')[0]))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
         
@@ -168,24 +168,24 @@ def run(args):
         dataloader = make_dataloader(
             args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
         patch_total += dataloader.dataset._idcs_num
-        # probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
-        # time_total += time_network
+        probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
+        time_total += time_network
         
-        # # save heatmap
-        # probs_map = (probs_map * 255).astype(np.uint8)
-        # shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
-        # probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
-        # np.save(os.path.join(save_path, file), probs_map)
+        # save heatmap
+        probs_map = (probs_map * 255).astype(np.uint8)
+        shape_save = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
+        probs_map = cv2.resize(probs_map, (shape_save[1], shape_save[0]), interpolation=cv2.INTER_CUBIC)
+        np.save(os.path.join(save_path, file), probs_map)
 
-        # # visulize heatmap
-        # img_rgb = slide.read_region((0, 0), level_show, \
-        #                     tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
-        # img_rgb = np.asarray(img_rgb).transpose((1,0,2))
-        # probs_map = cv2.resize(probs_map, (img_rgb.shape[1], img_rgb.shape[0]), interpolation=cv2.INTER_CUBIC)
-        # probs_img_rgb = cv2.applyColorMap(probs_map, cv2.COLORMAP_JET)
-        # probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
-        # heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
-        # cv2.imwrite(os.path.join(save_path, file.split('.')[0] + '_heat.png'), heat_img)
+        # visulize heatmap
+        img_rgb = slide.read_region((0, 0), level_show, \
+                            tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
+        img_rgb = np.asarray(img_rgb).transpose((1,0,2))
+        probs_map = cv2.resize(probs_map, (img_rgb.shape[1], img_rgb.shape[0]), interpolation=cv2.INTER_CUBIC)
+        probs_img_rgb = cv2.applyColorMap(probs_map, cv2.COLORMAP_JET)
+        probs_img_rgb = cv2.cvtColor(probs_img_rgb, cv2.COLOR_BGR2RGB)
+        heat_img = cv2.addWeighted(probs_img_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
+        cv2.imwrite(os.path.join(save_path, file.split('.')[0] + '_heat.png'), heat_img)
 
     time_total_avg = time_total / len(dir)
     logging.info('AVG Run Time : {:.2f}'.format(time_total_avg))
@@ -199,9 +199,9 @@ def main():
         "./camelyon16/configs/cnn_dyn_l1.json",
         './datasets/test/prior_map_sampling_o0.25_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
-    args.GPU = "1"
+    args.GPU = "0"
     
-    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e2_1e3_nms_1.0_nmm_0.5_whole_fixsize_l1/testset_assign_2.json"
+    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e3_nms_1.0_nmm_0.5_whole_fixsize_l1/testset_assign_3.json"
     run(args)
 
 
