@@ -59,7 +59,7 @@ def parse_args():
                               './datasets/test/prior_map_sampling_o0.25_l1',
                               './datasets/test/patch_cluster_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = '1e0_5e2'
+    args.itc_threshold = '1e0_1e3'
     args.ini_patchsize = 256
     args.nms_threshold = 1.0
     args.nmm_threshold = 0.5
@@ -336,9 +336,11 @@ if __name__ == "__main__":
     mean_child_size = np.array([j['keep'][2] for i in seg_boxes_dict.values() for j in i]).mean()
     num_cluster_patches = np.array([len(i) for i in final_boxes_dict.values()]).sum()
     mean_cluster_size = np.array([j['cluster'][2:4] for i in final_boxes_dict.values() for j in i if 'cluster' in j.keys()]).mean()
-
+    mean_child_num = np.array([len(j['child']) for i in final_boxes_dict.values() for j in i if 'cluster' in j.keys()]).mean()
+    
     print('Generate total {} child patches with mean size {:.1f}'.format(num_child_patches, mean_child_size))
     print('Generate total {} cluster patches with mean size {:.1f}'.format(num_cluster_patches, mean_cluster_size))
+    print('Each cluster patch contain average {} child patches'.format(mean_child_num))
     
     with open(os.path.join(save_path, 'results.json'), 'w') as result_file:
         json.dump(final_boxes_dict, result_file)
