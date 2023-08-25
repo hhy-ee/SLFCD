@@ -144,7 +144,7 @@ def run(args):
         
     info = assign['data_info']
     save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                'save_pack_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_dynmodel_{}size_l{}'.format(info['th_roi'], \
+                'save_pack_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_dynmodel_{}size_child_l{}'.format(info['th_roi'], \
                 info['th_itc'], args.canvas_size, args.patch_size, info['sample_type'], info['patch_type'], level_save))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
@@ -158,8 +158,9 @@ def run(args):
 
     time_total = 0.0
     patch_total = 0
+    canvas_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
-    for file in sorted(dir)[80:]:
+    for file in sorted(dir)[:]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
         #           'save_roi_th_0.01_itc_th_1e0_5e2_edge_fixmodel_fixsize1x256_l{}'.format(level_save), file)):
         #     continue
@@ -173,16 +174,16 @@ def run(args):
         assign_per_img = [box for key in file_keys for box in assign[key]]
         parent_per_img = [{'keep': box['cluster']} for key in file_keys for box in cluster[key][1:]]
         child_per_img = [{'keep': child['cluster']} for key in file_keys for box in cluster[key][1:] for child in box['child']]
-        cluster_per_img = parent_per_img + child_per_img
+        cluster_per_img = child_per_img
         # generate prior
         prior = (prior_map, cluster_per_img)
         
         # calculate heatmap & runtime
         dataloader = make_dataloader(
             args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
-        patch_total += dataloader.dataset._idcs_num
+        patch_total += len(dataloader.dataset._X_idcs)
+        canvas_total += dataloader.dataset._idcs_num
         probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
-        patch_total += dataloader.dataset._idcs_num
         time_total += time_network
         
         # save heatmap
@@ -204,8 +205,10 @@ def run(args):
     time_total_avg = time_total / len(dir)
     logging.info('AVG Run Time : {:.2f}'.format(time_total_avg))
     logging.info('Total Patch Number : {:d}'.format(patch_total))
+    logging.info('Total Canvas Number : {:d}'.format(canvas_total))
     logging.info('AVG Patch Number : {:.2f}'.format(patch_total / len(dir)))
-
+    logging.info('AVG Canvas Number : {:.2f}'.format(canvas_total / len(dir)))
+    
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
@@ -216,9 +219,9 @@ def main():
     args.canvas_size = 800
     args.patch_size = 256
     args.fill_in = True
-    args.GPU = "1"
+    args.GPU = "2"
     
-    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e3_nms_1.0_nmm_0.5_whole_fixsize_l1/results_boxes.json"
+    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e3_nms_1.0_nmm_0.7_whole_fixsize_l1/results_boxes.json"
     run(args)
 
 
