@@ -29,6 +29,13 @@ class WSIPatchDataset(Dataset):
         self._X_size = [i['keep'][2] for i in self.assign_per_img]
         self._Y_size = [i['keep'][2] for i in self.assign_per_img]
         
+        if self._args.random_shuffle:
+            shuffle_idx = np.random.permutation(list(range(len(self._X_idcs))))
+            self._X_idcs = np.array(self._X_idcs)[shuffle_idx]
+            self._Y_idcs = np.array(self._Y_idcs)[shuffle_idx]
+            self._X_size = np.array(self._X_size)[shuffle_idx]
+            self._Y_size = np.array(self._Y_size)[shuffle_idx]
+        
         self._canvas_size = self._args.canvas_size
         
         self._patch_per_side = int(self._canvas_size / self._patch_size)

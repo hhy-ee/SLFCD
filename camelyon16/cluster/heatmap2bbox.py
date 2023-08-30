@@ -56,16 +56,16 @@ def parse_args():
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
     args = parser.parse_args(['./datasets/test/images', 
-                              './datasets/test/prior_map_sampling_o0.25_l1',
+                              './datasets/test/prior_map_sampling_o0.5_l1',
                               './datasets/test/patch_cluster_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = '1e0_1e3'
+    args.itc_threshold = '1e0_1e9'
     args.ini_patchsize = 256
     args.nms_threshold = 1.0
     args.nmm_threshold = 0.5
     args.fea_threshold = 0.5
     args.patch_type = 'fix'
-    args.sample_type = 'edge'
+    args.sample_type = 'whole'
     args.image_show = False
     args.feature_save = False
     args.label_save = False

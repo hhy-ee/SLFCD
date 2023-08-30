@@ -138,8 +138,9 @@ def run(args):
     logging.basicConfig(level=logging.INFO)
     
     save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                'save_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_fixmodel_fixsize_l{}'.format(args.roi_threshold, \
-                args.itc_threshold, args.canvas_size, args.patch_size, args.sample_type, level_save))
+                'save_stage2_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_shuffle_{}_sparsity_{}_{}_region_{}_model_l{}'.\
+                format(args.roi_threshold, args.itc_threshold, args.canvas_size, args.patch_size, args.random_shuffle, \
+                args.sample_sparsity , args.sample_type, os.path.basename(args.ckpt_path).split('_')[1], level_save))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
 
@@ -152,10 +153,10 @@ def run(args):
     
     time_total = 0.0
     patch_total = 0
+    canvas_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
-    for file in sorted(dir)[:]:
-        # if os.path.exists(os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-        #           'save_roi_th_0.01_itc_th_1e0_5e2_edge_fixmodel_fixsize1x256_l{}'.format(level_save), file)):
+    for file in sorted(dir)[:40]:
+        # if os.path.exists(os.path.join(save_path, file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         first_stage_map = np.load(os.path.join(args.prior_path, file))
@@ -186,7 +187,8 @@ def run(args):
         # calculate heatmap & runtime
         dataloader = make_dataloader(
             args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
-        patch_total += dataloader.dataset._idcs_num
+        patch_total += len(dataloader.dataset._X_idcs)
+        canvas_total += dataloader.dataset._idcs_num
         probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
         time_total += time_network
         
@@ -209,22 +211,27 @@ def run(args):
     time_total_avg = time_total / len(dir)
     logging.info('AVG Run Time : {:.2f}'.format(time_total_avg))
     logging.info('Total Patch Number : {:d}'.format(patch_total))
+    logging.info('Total Canvas Number : {:d}'.format(canvas_total))
     logging.info('AVG Patch Number : {:.2f}'.format(patch_total / len(dir)))
+    logging.info('AVG Canvas Number : {:.2f}'.format(canvas_total / len(dir)))
     
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
         "./save_train/train_fix_l1",
         "./camelyon16/configs/cnn_fix_l1.json",
-        './datasets/test/prior_map_sampling_o0.25_l1',
+        './datasets/test/prior_map_sampling_o0.5_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
     args.canvas_size = 800
     args.patch_size = 256
-    args.GPU = "0"
+    args.GPU = "1"
     
+    args.random_shuffle = False
+    args.sample_sparsity = 0.125
+
     args.roi_threshold = 0.1
-    args.itc_threshold = '1e0_1e3'
-    args.sample_type = 'bilateral'
+    args.itc_threshold = '1e0_1e9'
+    args.sample_type = 'whole'
     run(args)
 
 

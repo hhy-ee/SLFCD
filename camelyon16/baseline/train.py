@@ -214,7 +214,7 @@ def main():
         "./camelyon16/configs/cnn_dyn_l1.json",
         "./save_train/train_dyn_nobg_l1"])
     args.device_ids = '3'
-    args.init_mode = 'scatch'
+    args.init_mode = 'resume'
     run(args)
     
     # args = parser.parse_args([

@@ -36,11 +36,13 @@ class WSIPatchDataset(Dataset):
             self._POI = np.logical_or((self.dist_from_bg >= 1), (dist_from_fg == 1))
         
         self._resolution = 2 ** (self._level_sample - self._level_ckpt)
+        self._POI = self.sparse_sample(self._POI, self._args.sample_sparsity)
         self._X_idcs, self._Y_idcs = np.where(self._POI)
         
-        # shuffle_idx = np.random.permutation(list(range(len(self._X_idcs))))
-        # self._X_idcs = self._X_idcs[shuffle_idx]
-        # self._Y_idcs = self._Y_idcs[shuffle_idx]
+        if self._args.random_shuffle:
+            shuffle_idx = np.random.permutation(list(range(len(self._X_idcs))))
+            self._X_idcs = self._X_idcs[shuffle_idx]
+            self._Y_idcs = self._Y_idcs[shuffle_idx]
         
         self._canvas_size = self._args.canvas_size
         
@@ -50,6 +52,24 @@ class WSIPatchDataset(Dataset):
                         // (self._patch_per_side - 1) if self._patch_per_side != 1 else 0
         
         self._idcs_num = int(np.ceil(len(self._X_idcs) / self._patch_per_side**2))
+
+    def sparse_sample(self, matrix, sparsity):
+
+        if sparsity < 0 or sparsity > 1:
+            raise ValueError("Sparsity should be between 0 and 1.")
+        
+        num_nonzero_elements = int(matrix.sum() * sparsity)
+
+        nonzero_indices = np.argwhere(matrix != 0)
+
+        selected_indices = np.random.choice(nonzero_indices.shape[0], num_nonzero_elements, replace=False)
+
+        sparse_matrix = np.zeros_like(matrix)
+        for index in selected_indices:
+            row, col = nonzero_indices[index]
+            sparse_matrix[row, col] = matrix[row, col]
+    
+        return sparse_matrix
 
     def __len__(self):
         return self._idcs_num

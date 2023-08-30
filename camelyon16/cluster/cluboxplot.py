@@ -135,11 +135,6 @@ def run(args):
     with open(args.assign_path, 'r') as f_assign:
         assign = json.load(f_assign)
         
-    save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                    '{}_{}'.format(args.assign_path.split('/')[-2], args.assign_path.split('/')[-1].split('.')[0]))
-    if not os.path.exists(save_path):
-        os.mkdir(save_path)
-        
     with open(args.cnn_path) as f:
         cnn = json.load(f)
     ckpt = torch.load(os.path.join(args.ckpt_path, 'best.ckpt'))
@@ -152,8 +147,7 @@ def run(args):
     canvas_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
     for file in sorted(dir)[:]:
-        # if os.path.exists(os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-        #           'save_roi_th_0.01_itc_th_1e0_5e2_edge_fixmodel_fixsize1x256_l{}'.format(level_save), file)):
+        # if os.path.exists(os.path.join(save_path, file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         first_stage_map = np.load(os.path.join(args.prior_path, file))
@@ -169,9 +163,9 @@ def run(args):
         # plot
         scale_show = 2 ** (level_ckpt - level_show)
         total_boxes = [patch for canvas in origin_cluster for patch in canvas if patch[0] != 0]
+        total_boxes_array = np.array(total_boxes)
+        width, height = total_boxes_array[:,2] - total_boxes_array[:,0], total_boxes_array[:,3] - total_boxes_array[:,1]
         
-        # total_boxes_array = np.array(total_boxes)
-        # width, height = total_boxes_array[:,2] - total_boxes_array[:,0], total_boxes_array[:,3] - total_boxes_array[:,1]
         # img = Image.open(os.path.join(args.prior_path, file.replace('.npy','_heat.png')))
         # img_dyn_draw = ImageDraw.ImageDraw(img)
         # boxes_show = [[int(i[0] * scale_show), int(i[1] * scale_show), \
@@ -197,9 +191,9 @@ def main():
         "./camelyon16/configs/cnn_dyn_l1.json",
         './datasets/test/prior_map_sampling_o0.25_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
-    args.GPU = "1"
+    args.GPU = "0"
     
-    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e3_nms_1.0_nmm_0.7_whole_fixsize_l1/testset_assign_2.json"
+    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e9_nms_1.0_nmm_0.5_whole_fixsize_l1/testset_assign_2.json"
     run(args)
 
 

@@ -19,7 +19,7 @@ class WSIPatchDataset(Dataset):
         self._scale = scale
         self._level_tissue = level_tissue
         self._level_ckpt = level_ckpt
-        self.args = args
+        self._args = args
         self._patch_size = image_size
         self._normalize = normalize
         self._flip = flip
@@ -30,9 +30,28 @@ class WSIPatchDataset(Dataset):
         self._image_size = tuple([int(i / 2**self._level_ckpt) for i in self._slide.level_dimensions[0]])
         self._resolution = tuple([i * 2** (self._level_tissue - self._level_ckpt) for i in self._scale])
         self._POI = self._prior
+        self._POI = self.sparse_sample(self._POI, self._args.sample_sparsity)
         self._X_idcs, self._Y_idcs = np.where(self._POI)
         self._idcs_num = len(self._X_idcs)
 
+    def sparse_sample(self, matrix, sparsity):
+
+        if sparsity < 0 or sparsity > 1:
+            raise ValueError("Sparsity should be between 0 and 1.")
+        
+        num_nonzero_elements = int(matrix.sum() * sparsity)
+
+        nonzero_indices = np.argwhere(matrix != 0)
+
+        selected_indices = np.random.choice(nonzero_indices.shape[0], num_nonzero_elements, replace=False)
+
+        sparse_matrix = np.zeros_like(matrix)
+        for index in selected_indices:
+            row, col = nonzero_indices[index]
+            sparse_matrix[row, col] = matrix[row, col]
+    
+        return sparse_matrix
+    
     def __len__(self):
         return self._idcs_num
 

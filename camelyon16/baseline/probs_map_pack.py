@@ -144,7 +144,7 @@ def run(args):
         
     info = assign['data_info']
     save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                'save_pack_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_dynmodel_{}size_child_l{}'.format(info['th_roi'], \
+                'save_pack_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_dynmodel_{}size_parent_l{}'.format(info['th_roi'], \
                 info['th_itc'], args.canvas_size, args.patch_size, info['sample_type'], info['patch_type'], level_save))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
@@ -161,8 +161,7 @@ def run(args):
     canvas_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
     for file in sorted(dir)[:]:
-        # if os.path.exists(os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-        #           'save_roi_th_0.01_itc_th_1e0_5e2_edge_fixmodel_fixsize1x256_l{}'.format(level_save), file)):
+        # if os.path.exists(os.path.join(save_path, file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         first_stage_map = np.load(os.path.join(args.prior_path, file))
@@ -174,7 +173,7 @@ def run(args):
         assign_per_img = [box for key in file_keys for box in assign[key]]
         parent_per_img = [{'keep': box['cluster']} for key in file_keys for box in cluster[key][1:]]
         child_per_img = [{'keep': child['cluster']} for key in file_keys for box in cluster[key][1:] for child in box['child']]
-        cluster_per_img = child_per_img
+        cluster_per_img = parent_per_img
         # generate prior
         prior = (prior_map, cluster_per_img)
         
@@ -214,14 +213,15 @@ def main():
         "./datasets/test/images",
         "./save_train/train_dyn_l1",
         "./camelyon16/configs/cnn_dyn_l1.json",
-        './datasets/test/prior_map_sampling_o0.25_l1',
+        './datasets/test/prior_map_sampling_o0.5_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
     args.canvas_size = 800
     args.patch_size = 256
     args.fill_in = True
+    args.random_shuffle = False
     args.GPU = "2"
     
-    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e3_nms_1.0_nmm_0.7_whole_fixsize_l1/results_boxes.json"
+    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e9_nms_1.0_nmm_0.5_whole_fixsize_l1/results_boxes.json"
     run(args)
 
 
