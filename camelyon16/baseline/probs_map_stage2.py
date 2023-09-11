@@ -62,10 +62,10 @@ def chose_model(mod):
     return model
 
 
-def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
+def get_probs_map(model, slide, level_ckpt, dataloader, prior=None, level_prior=3):
 
-    shape = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
-    resolution = 2 ** (level_save - level_ckpt)
+    shape = tuple([int(i / 2**level_prior) for i in slide.level_dimensions[0]])
+    resolution = 2 ** (level_prior - level_ckpt)
     if prior is not None:
         probs_map = prior / 255
         counter = np.ones(shape)
@@ -84,7 +84,7 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
             data = Variable(data.cuda(non_blocking=True))
             output = model(data)
             probs = output['out'][:, :].sigmoid().cpu().data.numpy()
-
+            
             box = [[(item / resolution).to(torch.int) for item in list] for list in box]
             patch = [[(item / resolution).to(torch.int) for item in list] for list in patch]
             for bs in range(len(probs)):
@@ -95,7 +95,7 @@ def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
                     prob = transform.resize(probs[bs, 0, c_l: c_r, c_t: c_b], (p_s, p_s))
                     counter[b_l: b_r, b_t: b_b] += 1
                     probs_map[b_l: b_r, b_t: b_b] += prob[p_l: p_r, p_t: p_b]
-            
+
             count += 1
             time_spent = time.time() - time_now
             time_now = time.time()
@@ -128,7 +128,7 @@ def make_dataloader(args, file, cnn, slide, prior, level_sample, level_ckpt, fli
 
 def run(args):
     # configuration
-    level_save = 3
+    level_save = 6
     level_show = 6
     level_sample = int(args.probs_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
@@ -140,10 +140,10 @@ def run(args):
     save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
                 'save_stage2_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_shuffle_{}_sparsity_{}_{}_region_{}_model_l{}'.\
                 format(args.roi_threshold, args.itc_threshold, args.canvas_size, args.patch_size, args.random_shuffle, \
-                args.sample_sparsity , args.sample_type, os.path.basename(args.ckpt_path).split('_')[1], level_save))
+                args.sample_sparsity , args.sample_type, os.path.basename(args.cnn_path).split('_')[1], level_save))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
-
+        
     with open(args.cnn_path) as f:
         cnn = json.load(f)
     ckpt = torch.load(os.path.join(args.ckpt_path, 'best.ckpt'))
@@ -189,7 +189,7 @@ def run(args):
             args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
         patch_total += len(dataloader.dataset._X_idcs)
         canvas_total += dataloader.dataset._idcs_num
-        probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
+        probs_map, time_network = get_probs_map(model, slide, level_ckpt, dataloader, prior=first_stage_map)
         time_total += time_network
         
         # save heatmap
@@ -224,12 +224,12 @@ def main():
         './datasets/test/dens_map_sampling_2s_l6'])
     args.canvas_size = 800
     args.patch_size = 256
-    args.GPU = "1"
+    args.GPU = "2"
     
     args.random_shuffle = False
-    args.sample_sparsity = 0.125
+    args.sample_sparsity = 1.0
 
-    args.roi_threshold = 0.1
+    args.roi_threshold = 0.99
     args.itc_threshold = '1e0_1e9'
     args.sample_type = 'whole'
     run(args)

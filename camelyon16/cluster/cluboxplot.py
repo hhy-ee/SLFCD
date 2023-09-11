@@ -166,17 +166,17 @@ def run(args):
         total_boxes_array = np.array(total_boxes)
         width, height = total_boxes_array[:,2] - total_boxes_array[:,0], total_boxes_array[:,3] - total_boxes_array[:,1]
         
-        # img = Image.open(os.path.join(args.prior_path, file.replace('.npy','_heat.png')))
-        # img_dyn_draw = ImageDraw.ImageDraw(img)
-        # boxes_show = [[int(i[0] * scale_show), int(i[1] * scale_show), \
-        #                 int(i[2] * scale_show), int(i[3] * scale_show)] for i in total_boxes]
-        # for i in range(len(boxes_show)):
-        #     info = boxes_show[i]
-        #     if width[i] == 256:
-        #         img_dyn_draw.rectangle(((info[0], info[1]), (info[2], info[3])), fill=None, outline='blue', width=1)
-        #     else:
-        #         img_dyn_draw.rectangle(((info[0], info[1]), (info[2], info[3])), fill=None, outline='green', width=1)
-        # img.save(os.path.join('/home/ps/hhy/slfcd/datasets/test/result', os.path.basename(file).split('.')[0] + '_box.png'))
+        img = Image.open(os.path.join(args.prior_path, file.replace('.npy','_heat.png')))
+        img_dyn_draw = ImageDraw.ImageDraw(img)
+        boxes_show = [[int(i[0] * scale_show), int(i[1] * scale_show), \
+                        int(i[2] * scale_show), int(i[3] * scale_show)] for i in total_boxes]
+        for i in range(len(boxes_show)):
+            info = boxes_show[i]
+            if width[i] == 256:
+                img_dyn_draw.rectangle(((info[0], info[1]), (info[2], info[3])), fill=None, outline='blue', width=1)
+            else:
+                img_dyn_draw.rectangle(((info[0], info[1]), (info[2], info[3])), fill=None, outline='green', width=1)
+        img.save(os.path.join('/home/ps/hhy/slfcd/datasets/test/result1', os.path.basename(file).split('.')[0] + '_box.png'))
         
         patch_total += len(total_boxes)
         canvas_total += len(origin_cluster)
@@ -191,9 +191,12 @@ def main():
         "./camelyon16/configs/cnn_dyn_l1.json",
         './datasets/test/prior_map_sampling_o0.25_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
-    args.GPU = "0"
+    args.GPU = "2"
     
-    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e9_nms_1.0_nmm_0.5_whole_fixsize_l1/testset_assign_2.json"
+    # args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e3_nms_1.0_nmm_0.7_whole_fixsize_l1/""testset_assign_2.json"
+    # args.assign_path = "/home/ps/hhy/assignnet/experiments/CAMELYON_IMAGE/tree_ap_ptr_ban_ap_shared_bin800_len9_select0.3_clu2_lambda1e-2_acc_single_l1/testset_assign_1.json"
+    args.assign_path = "/home/ps/hhy/assignnet/experiments/CAMELYON_IMAGE/tree_ap_ptr_ban_ap_shared_bin800_len9_select0.3_clu2_lambda1e-3_acc_fusion_l1/testset_assign_1.json"
+    # args.assign_path = "/home/ps/hhy/assignnet/experiments/CAMELYON_IMAGE/tree_ap_ptr_ban_ap_shared_bin800_len9_select0.3_clu2_lambda1e-3_acc_single_l1/testset_assign_1.json"
     run(args)
 
 

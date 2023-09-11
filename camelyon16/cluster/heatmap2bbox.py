@@ -62,7 +62,7 @@ def parse_args():
     args.itc_threshold = '1e0_1e9'
     args.ini_patchsize = 256
     args.nms_threshold = 1.0
-    args.nmm_threshold = 0.5
+    args.nmm_threshold = 0.7
     args.fea_threshold = 0.5
     args.patch_type = 'fix'
     args.sample_type = 'whole'

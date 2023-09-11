@@ -54,10 +54,10 @@ def chose_model(mod):
     return model
 
 
-def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
+def get_probs_map(model, slide, level_ckpt, dataloader, prior=None, level_prior=3):
 
-    shape = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
-    resolution = 2 ** (level_save - level_ckpt)
+    shape = tuple([int(i / 2**level_prior) for i in slide.level_dimensions[0]])
+    resolution = 2 ** (level_prior - level_ckpt)
     if prior is not None:
         probs_map = prior / 255
         counter = np.ones(shape)
@@ -120,7 +120,7 @@ def make_dataloader(args, file, cnn, slide, prior, level_sample, level_ckpt, fli
 
 def run(args):
     # configuration
-    level_save = 3
+    level_save = 6
     level_show = 6
     level_sample = int(args.probs_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
@@ -134,7 +134,7 @@ def run(args):
         
     save_path = os.path.join(args.probs_path, \
                             'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                            '{}_{}_{}'.format(args.assign_path.split('/')[-2], \
+                            'save_{}_{}_{}'.format(args.assign_path.split('/')[-2], \
                             '{}_model'.format(os.path.basename(args.ckpt_path).split('_')[1]), \
                             args.assign_path.split('/')[-1].split('.')[0]))
     if not os.path.exists(save_path):
@@ -170,7 +170,7 @@ def run(args):
         dataloader = make_dataloader(
             args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
         patch_total += dataloader.dataset._idcs_num
-        probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
+        probs_map, time_network = get_probs_map(model, slide, level_ckpt, dataloader, prior=first_stage_map)
         time_total += time_network
         
         # save heatmap
@@ -197,13 +197,13 @@ def run(args):
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_dyn_l1",
+        "./save_train/train_dyn_nobg_l1",
         "./camelyon16/configs/cnn_dyn_l1.json",
         './datasets/test/prior_map_sampling_o0.5_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
-    args.GPU = "1"
+    args.GPU = "2"
     
-    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e9_nms_1.0_nmm_0.7_whole_fixsize_l1/testset_assign_2.json"
+    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e3_nms_1.0_nmm_0.7_whole_fixsize_l1/testset_assign_2.json"
     run(args)
 
 

@@ -60,10 +60,10 @@ def chose_model(mod):
     return model
 
 
-def get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=None):
+def get_probs_map(model, slide, level_ckpt, dataloader, prior=None, level_prior=3):
 
-    shape = tuple([int(i / 2**level_save) for i in slide.level_dimensions[0]])
-    resolution = 2 ** (level_save - level_ckpt)
+    shape = tuple([int(i / 2**level_prior) for i in slide.level_dimensions[0]])
+    resolution = 2 ** (level_prior - level_ckpt)
     if prior is not None:
         probs_map = prior / 255
         counter = np.ones(shape)
@@ -127,7 +127,7 @@ def make_dataloader(args, file, cnn, slide, prior, level_sample, level_ckpt, fli
 
 def run(args):
     # configuration
-    level_save = 3
+    level_save = 6
     level_show = 6
     level_sample = int(args.probs_path.split('l')[-1])
     level_ckpt = int(args.ckpt_path.split('l')[-1])
@@ -144,8 +144,9 @@ def run(args):
         
     info = assign['data_info']
     save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                'save_pack_roi_th_{}_itc_th_{}_canvas_{}_patch_{}_{}_dynmodel_{}size_parent_l{}'.format(info['th_roi'], \
-                info['th_itc'], args.canvas_size, args.patch_size, info['sample_type'], info['patch_type'], level_save))
+                'save_pack_roi_th_{}_itc_th_{}_canvas_{}_{}_patch_{}_shuffle_{}_{}_region_{}_model_{}_size_l{}'.format(\
+                info['th_roi'], info['th_itc'], args.canvas_size, args.patch_type, args.patch_size, args.random_shuffle, \
+                info['sample_type'], os.path.basename(args.cnn_path).split('_')[1], info['patch_type'], level_save))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
         
@@ -173,7 +174,13 @@ def run(args):
         assign_per_img = [box for key in file_keys for box in assign[key]]
         parent_per_img = [{'keep': box['cluster']} for key in file_keys for box in cluster[key][1:]]
         child_per_img = [{'keep': child['cluster']} for key in file_keys for box in cluster[key][1:] for child in box['child']]
-        cluster_per_img = parent_per_img
+        if args.patch_type == 'child':
+            cluster_per_img = child_per_img
+        elif args.patch_type == 'parent':
+            cluster_per_img = parent_per_img
+        elif args.patch_type == 'total':
+            cluster_per_img = parent_per_img + child_per_img
+        
         # generate prior
         prior = (prior_map, cluster_per_img)
         
@@ -182,7 +189,7 @@ def run(args):
             args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
         patch_total += len(dataloader.dataset._X_idcs)
         canvas_total += dataloader.dataset._idcs_num
-        probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader, prior=first_stage_map)
+        probs_map, time_network = get_probs_map(model, slide, level_ckpt, dataloader, prior=first_stage_map)
         time_total += time_network
         
         # save heatmap
@@ -217,11 +224,12 @@ def main():
         './datasets/test/dens_map_sampling_2s_l6'])
     args.canvas_size = 800
     args.patch_size = 256
+    args.patch_type = 'child'
     args.fill_in = True
     args.random_shuffle = False
     args.GPU = "2"
     
-    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e9_nms_1.0_nmm_0.5_whole_fixsize_l1/results_boxes.json"
+    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e9_nms_1.0_nmm_0.7_whole_fixsize_l1/results_boxes.json"
     run(args)
 
 

@@ -114,7 +114,7 @@ def main():
         "./datasets/train/tumor_mask_l5",
         "./datasets/train/tissue_mask_l5",
         "./datasets/train/sample_gen_l0",
-        '8000'])
+        '4000'])
     run(args)
 
 

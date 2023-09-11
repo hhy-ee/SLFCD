@@ -213,7 +213,7 @@ def main():
     args = parser.parse_args([
         "./camelyon16/configs/cnn_dyn_l1.json",
         "./save_train/train_dyn_nobg_l1"])
-    args.device_ids = '3'
+    args.device_ids = '0'
     args.init_mode = 'resume'
     run(args)
     

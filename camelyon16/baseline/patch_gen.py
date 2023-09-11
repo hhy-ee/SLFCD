@@ -10,6 +10,7 @@ import openslide
 import numpy as np
 
 from tqdm import tqdm
+from skimage import transform
 from shutil import copyfile
 from PIL import Image
 from multiprocessing import Pool, Value, Lock
@@ -110,6 +111,8 @@ def run(args):
 
             if 'tumor' in file:
                 tumor_mask = np.load(os.path.join(args.wsi_path, 'tumor_mask_l1', pid + '.npy'))
+                size = tuple([int(i / 2**level) for i in slide.level_dimensions[0]])
+                tumor_mask = transform.resize(tumor_mask, size)
                 for opts in opts_list:
                     process(opts, slide, level, tumor_mask)
             else:

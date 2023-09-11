@@ -132,7 +132,7 @@ def run(args):
     time_total = 0.0
     patch_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_tissue)))
-    for file in sorted(dir)[:]:
+    for file in sorted(dir)[:40]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
@@ -182,9 +182,9 @@ def main():
         "./datasets/test/images",
         "./save_train/train_fix_l1",
         "./camelyon16/configs/cnn_fix_l1.json",
-        './datasets/test/prior_map_sampling_o0.5_l1'])
-    args.overlap = 0.5
-    args.sample_sparsity = 0.25
+        './datasets/test/prior_map_sampling_o0.125_l1'])
+    args.overlap = 0.125
+    args.sample_sparsity = 1.0
     args.GPU = "0"
     run(args)
     
