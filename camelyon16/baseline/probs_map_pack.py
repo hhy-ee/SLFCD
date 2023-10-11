@@ -143,10 +143,10 @@ def run(args):
         cluster = json.load(f_cluster)
         
     info = assign['data_info']
-    save_path = os.path.join(args.probs_path,  'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                'save_pack_roi_th_{}_itc_th_{}_canvas_{}_{}_patch_{}_shuffle_{}_{}_region_{}_model_{}_size_l{}'.format(\
-                info['th_roi'], info['th_itc'], args.canvas_size, args.patch_type, args.patch_size, args.random_shuffle, \
-                info['sample_type'], os.path.basename(args.cnn_path).split('_')[1], info['patch_type'], level_save))
+    save_path = os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
+        'save_pack_roi_th_{}_itc_th_{}_canvas_{}_{}_patch_{}_shuffle_{}_pack_{}_{}_region_{}_model_{}_size_l{}'.format(\
+        info['th_roi'], info['th_itc'], args.canvas_size, args.patch_type, args.patch_size, args.random_shuffle, \
+        args.pack_mode, info['sample_type'], os.path.basename(args.cnn_path).split('_')[1], info['patch_type'], level_ckpt))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
         
@@ -161,7 +161,7 @@ def run(args):
     patch_total = 0
     canvas_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
-    for file in sorted(dir)[:]:
+    for file in sorted(dir)[:40]:
         # if os.path.exists(os.path.join(save_path, file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
@@ -218,18 +218,18 @@ def run(args):
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_dyn_l1",
-        "./camelyon16/configs/cnn_dyn_l1.json",
+        "./save_train/train_fix_l1",
+        "./camelyon16/configs/cnn_fix_l1.json",
         './datasets/test/prior_map_sampling_o0.5_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
     args.canvas_size = 800
     args.patch_size = 256
-    args.patch_type = 'child'
-    args.fill_in = True
+    args.patch_type = 'total'
+    args.pack_mode = 'crop'
     args.random_shuffle = False
     args.GPU = "2"
     
-    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e9_nms_1.0_nmm_0.7_whole_fixsize_l1/results_boxes.json"
+    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e9_nms_1.0_nmm_0.5_whole_region_fix_size_l1/results_boxes.json"
     run(args)
 
 

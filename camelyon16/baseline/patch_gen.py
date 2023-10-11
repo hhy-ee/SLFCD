@@ -131,10 +131,10 @@ def main():
     
     args = parser.parse_args([
         "./datasets/train",
-        "./datasets/train/sample_gen_l0",
-        "./datasets/train/patch_gen_dyn_l0"])
+        "./datasets/train/sample_gen_l2",
+        "./datasets/train/patch_gen_fix_l2"])
     args.patch_size = 256
-    args.patch_mode = 'dyn'
+    args.patch_mode = 'fix'
     run(args)
 
 if __name__ == '__main__':

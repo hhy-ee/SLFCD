@@ -45,8 +45,10 @@ parser.add_argument('--eight_avg', default=0, type=int, help='if using average'
                     ' default 0, which means disabled')
 
 def chose_model(mod):
-    if mod == 'segmentation':
+    if mod == 'fcn_resnet50':
         model = models.segmentation.fcn_resnet50(pretrained=False, num_classes=1)
+    elif mod == 'fcn_resnet101':
+        model = models.segmentation.fcn_resnet101(pretrained=False, num_classes=1)
     else:
         raise Exception("I have not add any models. ")
     return model
@@ -132,13 +134,18 @@ def run(args):
     time_total = 0.0
     patch_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_tissue)))
-    for file in sorted(dir)[:40]:
+    for file in sorted(dir)[80:]:
         # if os.path.exists(os.path.join(args.probs_path, 'model_l{}'.format(level_save), 'save_l{}'.format(level_save), file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
         tissue = np.load(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l{}'.format(level_tissue), file))
         
-        tissue_shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
+        # tissue_shape = tuple([int(i / 2**level_sample) for i in slide.level_dimensions[0]])
+        # tissue_prior = transform.resize(tissue, tissue_shape)
+        # prior_shape = tuple([int(i / int(cnn['image_size'] * (1 - args.overlap))) for i in tissue_shape])
+        # tissue_shape = tuple([int(i * int(cnn['image_size'] * (1 - args.overlap))) for i in prior_shape])
+        # tissue_prior = transform.resize(tissue_prior[:tissue_shape[0], :tissue_shape[1]], prior_shape)
+        # resol = (int(cnn['image_size'] * (1 - args.overlap)),)*2
         
         tissue_shape = tuple([int(np.ceil(i / 2**level_ckpt / int(cnn['image_size'] * (1 - args.overlap)))) for i in slide.level_dimensions[0]])
         prior_shape = tuple([int(i * int(cnn['image_size'] * (1 - args.overlap))) for i in tissue_shape])
@@ -147,12 +154,13 @@ def run(args):
         tissue_prior = transform.resize(tissue_prior, tissue_shape)
         if prior_shape[0] % tissue_shape[0] == 0 and prior_shape[1] % tissue_shape[1] ==0:
             scale = (int(prior_shape[0] / tissue_shape[0]), int(prior_shape[1] / tissue_shape[1]))
+            resol = tuple([i * 2** (level_tissue - level_ckpt) for i in scale])
         else:
             raise Exception("Please reset the overlap for sliding windows.")
         
         # calculate heatmap & runtime
         dataloader = make_dataloader(
-            args, cnn, slide, tissue_prior, scale, level_tissue, level_ckpt, flip='NONE', rotate='NONE')
+            args, cnn, slide, tissue_prior, resol, level_tissue, level_ckpt, flip='NONE', rotate='NONE')
         patch_total += dataloader.dataset._idcs_num
         probs_map, time_network = get_probs_map(model, slide, level_save, level_ckpt, dataloader)
         time_total += time_network
@@ -178,24 +186,25 @@ def run(args):
     logging.info('Total Patch Number : {:d}'.format(patch_total))
     
 def main():
+    # args = parser.parse_args([
+    #     "./datasets/test/images",
+    #     "./save_train/train_fix_res50_l1",
+    #     "./camelyon16/configs/cnn_fix_res50_l1.json",
+    #     './datasets/test/prior_map_sampling_o0.25_l1'])
+    # args.overlap = 0.125
+    # args.sample_sparsity = 1.0
+    # args.GPU = "0"
+    # run(args)
+    
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_fix_l1",
-        "./camelyon16/configs/cnn_fix_l1.json",
-        './datasets/test/prior_map_sampling_o0.125_l1'])
-    args.overlap = 0.125
+        "./save_train/train_fix_res101_l1",
+        "./camelyon16/configs/cnn_fix_res101_l1.json",
+        './datasets/test/prior_map_sampling_res101_o0.25_l1'])
+    args.overlap = 0.25
     args.sample_sparsity = 1.0
-    args.GPU = "0"
+    args.GPU = "1"
     run(args)
-    
-    # args = parser.parse_args([
-    #     "/media/ps/passport2/hhy/camelyon16/test/images",
-    #     "./save_train/train_fix_l0",
-    #     "./camelyon16/configs/cnn_fix_l0.json",
-    #     '/media/ps/passport2/hhy/camelyon16/test/pengjq_test/prior_map_sampling_o0.25_l0/epoch_14_l0'])
-    # args.overlap = 0.25
-    # args.GPU = "1"
-    # run(args)
 
 
 if __name__ == '__main__':

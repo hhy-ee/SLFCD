@@ -23,10 +23,10 @@ class WSIPatchDataset(Dataset):
     def _pre_process(self):
         self._image_size = tuple([int(i / 2**self._level_ckpt) for i in self._slide.level_dimensions[0]])
         self.prior_map, self.render_seq, self.origin_cluster, self.moved_cluster, self.bin_size = self._prior
-        
+        self._valid_patches = [p for c in self.origin_cluster for p in c if p != [0, 0, 1, 1]]
         self._canvas_size = self.bin_size
         
-        self._idcs_num = len( self.render_seq)
+        self._idcs_num = len(self.render_seq)
 
     def __len__(self):
         return self._idcs_num
@@ -34,14 +34,8 @@ class WSIPatchDataset(Dataset):
     def __getitem__(self, idx):
         canvas = np.zeros((3, self._canvas_size[idx], self._canvas_size[idx]), dtype=np.float32)
         
-        img_box, canvas_box, patch_box = [], [], []
+        img_box, canvas_box = [], []
         for p_idx in self.render_seq[idx]:
-            box = self.origin_cluster[idx][p_idx]
-            box[2], box[3] = max(box[2], box[0] + 1), max(box[3], box[1] + 1)
-            x_mask, y_mask, x_size, y_size = box[0], box[1], box[2]-box[0], box[3]-box[1]
-            
-            x = int(x_mask * self._slide.level_downsamples[self._level_ckpt])
-            y = int(y_mask * self._slide.level_downsamples[self._level_ckpt])
             
             moved_box = self.moved_cluster[idx][p_idx]
             x_start, y_start, x_end, y_end = moved_box
@@ -50,10 +44,33 @@ class WSIPatchDataset(Dataset):
             x_start, y_start = int(x_start), int(y_start), 
             x_end, y_end = x_start + x_patch_size, y_start + y_patch_size
             
+            box = self.origin_cluster[idx][p_idx]
+            box[2], box[3] = max(box[2], box[0] + 1), max(box[3], box[1] + 1)
+            x_mask, y_mask, x_size, y_size = box[0], box[1], box[2]-box[0], box[3]-box[1]
+            
+            if self._args.pack_mode == 'crop':
+                if x_size > x_patch_size or y_size > y_patch_size:
+                    x_center, y_center = (box[0] + box[2]) // 2, (box[1] + box[3]) // 2
+                    x_mask, y_mask = x_center - x_patch_size // 2, y_center - y_patch_size // 2
+                    x_size, y_size = x_patch_size, y_patch_size
+            elif self._args.pack_mode == 'dump':
+                if x_size != x_patch_size or y_size != y_patch_size:
+                    x_mask, y_mask, x_size, y_size = (0, 0, 1, 1)
+                    
+            box = [x_mask, y_mask, x_mask + x_size, y_mask + y_size]
+                
+            x = int(x_mask * self._slide.level_downsamples[self._level_ckpt])
+            y = int(y_mask * self._slide.level_downsamples[self._level_ckpt])
+            
             img = self._slide.read_region(
                     (x, y), self._level_ckpt, (x_size, y_size)).convert('RGB')
-            img = img.resize((x_patch_size, y_patch_size))
-            
+            if self._args.pack_mode == 'resize':
+                if x_size != x_patch_size or y_size != y_patch_size:
+                    img = img.resize((x_patch_size, y_patch_size))
+            elif self._args.pack_mode == 'dump':
+                if x_size != x_patch_size or y_size != y_patch_size:
+                    img = img.resize((x_patch_size, y_patch_size))
+                    
             if self._flip == 'FLIP_LEFT_RIGHT':
                     img = img.transpose(PIL.Image.FLIP_LEFT_RIGHT)
 

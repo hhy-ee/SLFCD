@@ -89,7 +89,7 @@ if __name__ == "__main__":
     seg_boxes_dict = {}
     final_boxes_dict ={}
 
-    save_path = os.path.join(args.output_path, 'cluster_roi_th_{}_itc_th_{}_nms_{}_nmm_{}_{}_{}size_l{}'.format(
+    save_path = os.path.join(args.output_path, 'cluster_roi_th_{}_itc_th_{}_nms_{}_nmm_{}_{}_region_{}_size_l{}'.format(
                 args.roi_threshold , args.itc_threshold, args.nms_threshold, args.nmm_threshold, args.sample_type,\
                 args.patch_type, level_output))
     if not os.path.exists(save_path):

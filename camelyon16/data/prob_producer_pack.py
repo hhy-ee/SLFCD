@@ -69,13 +69,19 @@ class WSIPatchDataset(Dataset):
                 
                 x_center = int(x_mask + x_size // 2)
                 y_center = int(y_mask + y_size // 2)
+                
+                if self._args.pack_mode == 'crop':
+                    if x_size > self._patch_size or y_size > self._patch_size:
+                        x_mask = x_center - self._patch_size // 2
+                        y_mask = y_center - self._patch_size // 2
+                        x_size, y_size = self._patch_size, self._patch_size
 
                 x = int(x_mask * self._slide.level_downsamples[self._level_ckpt])
                 y = int(y_mask * self._slide.level_downsamples[self._level_ckpt])
         
                 img = self._slide.read_region(
                     (x, y), self._level_ckpt, (x_size, y_size)).convert('RGB')
-                if self._args.fill_in:
+                if self._args.pack_mode == 'resize':
                     img = img.resize((self._patch_size, self._patch_size))
                 
                 if self._flip == 'FLIP_LEFT_RIGHT':
@@ -95,9 +101,9 @@ class WSIPatchDataset(Dataset):
                 
                 x_start = x_idx * (self._patch_size + self._interval)
                 y_start = y_idx * (self._patch_size + self._interval)
-                if self._args.fill_in:
-                    x_end = x_start+self._patch_size
-                    y_end = y_start+self._patch_size
+                if self._args.pack_mode == 'resize':
+                    x_end = x_start + self._patch_size
+                    y_end = y_start + self._patch_size
                 else:
                     x_end = x_start + x_size
                     y_end = y_start + y_size

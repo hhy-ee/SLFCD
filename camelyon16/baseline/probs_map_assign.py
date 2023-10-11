@@ -112,7 +112,7 @@ def make_dataloader(args, file, cnn, slide, prior, level_sample, level_ckpt, fli
 
     dataloader = DataLoader(
         WSIPatchDataset(slide, prior, level_sample, level_ckpt, args, file,
-                        image_size=None, normalize=True, flip=flip, rotate=rotate),
+                        image_size=256, normalize=True, flip=flip, rotate=rotate),
         batch_size=batch_size, num_workers=num_workers, drop_last=False)
 
     return dataloader
@@ -132,12 +132,11 @@ def run(args):
     with open(args.assign_path, 'r') as f_assign:
         assign = json.load(f_assign)
         
-    save_path = os.path.join(args.probs_path, \
-                            'model_prior_o{}_l{}'.format(overlap, level_ckpt), \
-                            'save_{}_{}_{}'.format(args.assign_path.split('/')[-2], \
-                            '{}_model'.format(os.path.basename(args.ckpt_path).split('_')[1]), \
-                            args.assign_path.split('/')[-1].split('.')[0]))
-    if not os.path.exists(save_path):
+    save_path = os.path.join(args.probs_path, 'model_prior_o{}_l{}'.format(overlap, level_ckpt), 'save_{}pack_{}{}_{}_region_{}{}'.format(\
+                args.assign_path.split('/')[-2].split(args.assign_path.split('/')[-2].split('_')[12])[0], args.pack_mode, \
+                args.assign_path.split('/')[-1].split('.')[0].split('testset_assign')[-1], args.assign_path.split('/')[-2].split('_')[12], \
+                '{}_model'.format(os.path.basename(args.ckpt_path).split('_')[1]), args.assign_path.split('/')[-2].split('region')[-1]))
+    if not os.path.exists(save_path): 
         os.mkdir(save_path)
         
     with open(args.cnn_path) as f:
@@ -149,8 +148,9 @@ def run(args):
 
     time_total = 0.0
     patch_total = 0
+    canvas_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
-    for file in sorted(dir)[:40]:
+    for file in sorted(dir)[127:]:
         # if os.path.exists(os.path.join(save_path, file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
@@ -169,7 +169,8 @@ def run(args):
         # calculate heatmap & runtime
         dataloader = make_dataloader(
             args, file, cnn, slide, prior, level_sample, level_ckpt, flip='NONE', rotate='NONE')
-        patch_total += dataloader.dataset._idcs_num
+        patch_total += len(dataloader.dataset._valid_patches)
+        canvas_total += dataloader.dataset._idcs_num
         probs_map, time_network = get_probs_map(model, slide, level_ckpt, dataloader, prior=first_stage_map)
         time_total += time_network
         
@@ -192,18 +193,20 @@ def run(args):
     time_total_avg = time_total / len(dir)
     logging.info('AVG Run Time : {:.2f}'.format(time_total_avg))
     logging.info('Total Patch Number : {:d}'.format(patch_total))
+    logging.info('Total Canvas Number : {:d}'.format(canvas_total))
     logging.info('AVG Patch Number : {:.2f}'.format(patch_total / len(dir)))
+    logging.info('AVG Canvas Number : {:.2f}'.format(canvas_total / len(dir)))
 
 def main():
     args = parser.parse_args([
         "./datasets/test/images",
-        "./save_train/train_dyn_nobg_l1",
-        "./camelyon16/configs/cnn_dyn_l1.json",
+        "./save_train/train_fix_l1",
+        "./camelyon16/configs/cnn_fix_l1.json",
         './datasets/test/prior_map_sampling_o0.5_l1',
         './datasets/test/dens_map_sampling_2s_l6'])
     args.GPU = "2"
-    
-    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e3_nms_1.0_nmm_0.7_whole_fixsize_l1/testset_assign_2.json"
+    args.pack_mode = 'dump'
+    args.assign_path = "./datasets/test/patch_cluster_l1/cluster_roi_th_0.1_itc_th_1e0_1e9_nms_1.0_nmm_0.5_whole_region_fix_size_l1/testset_assign_clu2_l1e-3_single.json"
     run(args)
 
 

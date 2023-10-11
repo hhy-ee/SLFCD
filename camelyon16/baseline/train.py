@@ -37,8 +37,10 @@ parser.add_argument('--init_mode', default='finetune', type=str, help='comma'
                     ' how to initial the pretrained weight')
 
 def chose_model(cnn):
-    if cnn['model'] == 'segmentation':
+    if cnn['model'] == 'fcn_resnet50':
         model = models.segmentation.fcn_resnet50(pretrained=False, num_classes=1)
+    elif cnn['model'] == 'fcn_resnet101':
+        model = models.segmentation.fcn_resnet101(pretrained=False, num_classes=1)
     else:
         raise Exception("I have not add any models. ")
     return model
@@ -210,19 +212,19 @@ def run(args):
 def main():
     logging.basicConfig(level=logging.INFO)
 
+    # args = parser.parse_args([
+    #     "./camelyon16/configs/cnn_dyn_l1.json",
+    #     "./save_train/train_dyn_nobg_l1"])
+    # args.device_ids = '0'
+    # args.init_mode = 'resume'
+    # run(args)
+    
     args = parser.parse_args([
-        "./camelyon16/configs/cnn_dyn_l1.json",
-        "./save_train/train_dyn_nobg_l1"])
+        "./camelyon16/configs/cnn_fix_res101_l1.json",
+        "./save_train/train_fix_res101_l1"])
     args.device_ids = '0'
     args.init_mode = 'resume'
     run(args)
-    
-    # args = parser.parse_args([
-    #     "./camelyon16/configs/cnn_fix_l0.json",
-    #     "./save_train/train_fix_l0"])
-    # args.device_ids = '3'
-    # args.init_mode = ''
-    # run(args)
 
 if __name__ == '__main__':
     main()

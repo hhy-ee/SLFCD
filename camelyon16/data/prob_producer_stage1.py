@@ -12,11 +12,11 @@ from torch.utils.data import Dataset
 
 class WSIPatchDataset(Dataset):
 
-    def __init__(self, slide, prior, scale, level_tissue, level_ckpt, args,
+    def __init__(self, slide, prior, resol, level_tissue, level_ckpt, args,
                  image_size=256, normalize=True, flip='NONE', rotate='NONE'):
         self._slide = slide
         self._prior = prior
-        self._scale = scale
+        self._resol = resol
         self._level_tissue = level_tissue
         self._level_ckpt = level_ckpt
         self._args = args
@@ -28,7 +28,10 @@ class WSIPatchDataset(Dataset):
 
     def _pre_process(self):
         self._image_size = tuple([int(i / 2**self._level_ckpt) for i in self._slide.level_dimensions[0]])
-        self._resolution = tuple([i * 2** (self._level_tissue - self._level_ckpt) for i in self._scale])
+        
+        if self._resol is not None:
+            self._resolution = self._resol
+            
         self._POI = self._prior
         self._POI = self.sparse_sample(self._POI, self._args.sample_sparsity)
         self._X_idcs, self._Y_idcs = np.where(self._POI)

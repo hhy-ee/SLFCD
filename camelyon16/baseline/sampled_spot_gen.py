@@ -111,10 +111,10 @@ def main():
     
     args = parser.parse_args([
         "./datasets/train/",
-        "./datasets/train/tumor_mask_l5",
-        "./datasets/train/tissue_mask_l5",
-        "./datasets/train/sample_gen_l0",
-        '4000'])
+        "./datasets/train/tumor_mask_l6",
+        "./datasets/train/tissue_mask_l6",
+        "./datasets/train/sample_gen_l2",
+        '1000'])
     run(args)
 
 

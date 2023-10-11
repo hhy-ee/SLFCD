@@ -1,0 +1,13 @@
+{
+  "model": "fcn_resnet101",
+  "batch_size": 1,
+  "image_size": 256,
+  "crop_size": 256,
+  "normalize": "True",
+  "lr": 0.001,
+  "momentum": 0.9,
+  "data_path_train": "./datasets/train/patch_gen_fix_l2",
+  "data_path_valid": "./datasets/train/patch_gen_fix_l2",
+  "epoch": 50,
+  "log_every": 5
+}

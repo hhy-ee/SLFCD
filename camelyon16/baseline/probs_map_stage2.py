@@ -155,7 +155,7 @@ def run(args):
     patch_total = 0
     canvas_total = 0
     dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tissue_mask_l6'))
-    for file in sorted(dir)[:40]:
+    for file in sorted(dir)[100:]:
         # if os.path.exists(os.path.join(save_path, file)):
         #     continue
         slide = openslide.OpenSlide(os.path.join(args.wsi_path, file.split('.')[0]+'.tif'))
@@ -227,9 +227,9 @@ def main():
     args.GPU = "2"
     
     args.random_shuffle = False
-    args.sample_sparsity = 1.0
+    args.sample_sparsity = 0.075
 
-    args.roi_threshold = 0.99
+    args.roi_threshold = 0.1
     args.itc_threshold = '1e0_1e9'
     args.sample_type = 'whole'
     run(args)
