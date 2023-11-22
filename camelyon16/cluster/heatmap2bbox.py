@@ -198,7 +198,6 @@ if __name__ == "__main__":
             
         # Generate patches from each tumor cell
         max_w, max_h = first_stage_map.shape
-        # for i in range(len(filtered_properties)):
         for i in tqdm(range(len(filtered_properties)), total=len(filtered_properties)):
             boxes_tumor = []
             tc_X = filtered_properties[i].coords[:,0]
@@ -215,7 +214,7 @@ if __name__ == "__main__":
                     scr = first_stage_map[l: r, t: b][pos_idx].mean() if len(pos_idx[0]) > 0 else 0
                     l, t, r, b = l * scale_out, t * scale_out, r * scale_out, b  * scale_out
                     boxes_tumor.append([l, t, r, b, scr])
-            
+                    
             if args.patch_type == 'fix':
                 # fix patches
                 boxes_fix = list(boxes_tumor)
@@ -298,7 +297,7 @@ if __name__ == "__main__":
                         child.update(features)
             
             final_boxes_dict.update({'{}_tc_{}'.format(file.split('.npy')[0], i): nmm_boxes_dict})
-        
+            
         if args.image_show:
             img = Image.open(os.path.join(args.prior_path, file.replace('.npy','_heat.png')))
             img_nms_draw = ImageDraw.ImageDraw(img)

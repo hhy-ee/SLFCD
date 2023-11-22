@@ -1,62 +1,34 @@
 import cv2
 import os
-import openslide
 import json
 import time
+import h5py
+import openslide
 import numpy as np
 from PIL import Image
 from PIL import ImageDraw
 from tqdm import tqdm
 
-def split_overlay_map1(grid, max_window_size, densmap_level, output_level):
-    """
-    Conduct eight-connected-component methods on grid to connnect all pixel within the similar region
-    :param grid: desnity mask to connect
-    :return: merged regions for cropping purpose
-    """
-    if grid is None or grid[0] is None:
-        return 0
-    x_idx, y_idx = np.array([]).astype(np.int64), np.array([]).astype(np.int64)
-    for prob in np.unique(grid)[-1:0:-1]:
-        idx = np.where(grid == prob)
-        x_idx = np.concatenate((x_idx, idx[0]))
-        y_idx = np.concatenate((y_idx, idx[1]))
-
-    # Assume overlap_map is a 2d feature map
-    m, n = grid.shape
-    visit = np.zeros((m, n))
-    count, queue, result = 0, [], []
-    for i, j in zip(x_idx, y_idx):
-        if not visit[i][j]:
-            if grid[i][j] == 0:
-                visit[i][j] = 1
-                continue
-            queue.append([i, j])
-            top, left = float("inf"), float("inf")
-            bot, right = float("-inf"), float("-inf")
-            while queue:
-                i_cp, j_cp = queue.pop(0)
-                top = min(i_cp, top)
-                left = min(j_cp, left)
-                bot = max(i_cp, bot)
-                right = max(j_cp, right)
-                if 0 <= i_cp < m and 0 <= j_cp < n and not visit[i_cp][j_cp]:
-                    visit[i_cp][j_cp] = 1
-                    if grid[i_cp][j_cp] != 0:
-                        queue.append([i_cp, j_cp + 1])
-                        queue.append([i_cp + 1, j_cp])
-                        queue.append([i_cp, j_cp - 1])
-                        queue.append([i_cp - 1, j_cp])
-                pixel_area = (right - left + 1) * (bot - top + 1)
-                if pixel_area > (max_window_size[0] * max_window_size[1]) / (2**(densmap_level - output_level))**2:
-                    queue = []
-                    break
-
-            if  top < bot and left < right:
-                count += 1
-                result.append([count, (max(0, left), max(0, top)), (min(right + 1, n), min(bot + 1, m)), pixel_area])
-            # compute pixel area by split_coord
-    return result
+def save_hdf5(output_path, asset_dict, attr_dict= None, mode='a'):
+    file = h5py.File(output_path, mode)
+    for key, val in asset_dict.items():
+        data_shape = val.shape
+        if key not in file:
+            data_type = val.dtype
+            chunk_shape = (1, ) + data_shape[1:]
+            maxshape = (None, ) + data_shape[1:]
+            dset = file.create_dataset(key, shape=data_shape, maxshape=maxshape, chunks=chunk_shape, dtype=data_type)
+            dset[:] = val
+            if attr_dict is not None:
+                if key in attr_dict.keys():
+                    for attr_key, attr_val in attr_dict[key].items():
+                        dset.attrs[attr_key] = attr_val
+        else:
+            dset = file[key]
+            dset.resize(len(dset) + data_shape[0], axis=0)
+            dset[-data_shape[0]:] = val
+    file.close()
+    return output_path
 
 def point_based_split_overlay_map(grid, max_window_size, densmap_level, output_level):
     """
