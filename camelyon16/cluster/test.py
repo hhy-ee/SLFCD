@@ -61,11 +61,11 @@ def parse_args():
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/test/images', 
-                              './datasets/test/prior_map_sampling_o0.25_l1',
-                              './datasets/test/patch_cluster_l1'])
+    args = parser.parse_args(['./datasets/train/tumor', 
+                              './datasets/train/prior_map_sampling_o0.5_l1',
+                              './datasets/train/patch_cluster_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = '1e0_1e9'
+    args.itc_threshold = '1e0_1e3'
     args.ini_patchsize = 256
     args.nms_threshold = 1.0
     args.nmm_threshold = 0.7
@@ -74,7 +74,7 @@ def parse_args():
     args.feature_type = 'cnn_based'
     args.image_show = True
     args.feature_save = True
-    args.label_save = False
+    args.label_save = True
     return args
 
 if __name__ == "__main__":
@@ -259,7 +259,7 @@ if __name__ == "__main__":
                 
                 # feature extraction
                 if args.feature_type == 'cnn_based':
-                    img, info = [], []
+                    features, info = [], []
                     model = resnet50_baseline(pretrained=True)
                     model = model.to(device)
                     patch_transforms = transforms.Compose([transforms.ToTensor(),
@@ -271,7 +271,10 @@ if __name__ == "__main__":
                                                         level_output, (clu_box[2], clu_box[3])).convert('RGB')
                         slide_patch = slide_patch.resize((args.ini_patchsize, ) * 2)
                         slide_patch = patch_transforms(slide_patch).unsqueeze(0)
-                        img.append(slide_patch)
+                        slide_patch = slide_patch.to(device, non_blocking=True)
+                        with torch.no_grad():	
+                            feature = model(slide_patch)
+                        features.append(feature)
                         info.append(clu_box + [0, int(file.split('_')[1].split('.')[0]), i])
                         for k, child in enumerate(cluster['child']):
                             chi_box = child['cluster']
@@ -279,11 +282,12 @@ if __name__ == "__main__":
                                                         int(chi_box[1]* slide.level_downsamples[level_output])), \
                                                         level_output, (chi_box[2], chi_box[3])).convert('RGB')
                             slide_patch = patch_transforms(slide_patch).unsqueeze(0)
-                            img.append(slide_patch)
+                            slide_patch = slide_patch.to(device, non_blocking=True)
+                            with torch.no_grad():	
+                                feature = model(slide_patch)
+                            features.append(feature)
                             info.append(clu_box + [1, int(file.split('_')[1].split('.')[0]), i])
-                    img = torch.cat(img).to(device, non_blocking=True)
-                    with torch.no_grad():	
-                        features = model(img).cpu().numpy()
+                    features = torch.cat(features).cpu().numpy()
                     info = np.concatenate(info).reshape(len(info), -1)
                     asset_dict = {'features': features, 'coords': info[:, :4], 'file': info[:, 4:]}
                     save_hdf5(os.path.join(save_path, 'results.h5'), asset_dict, attr_dict= None, mode='w')
