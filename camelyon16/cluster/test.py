@@ -72,7 +72,7 @@ def parse_args():
     args.fea_threshold = 0.5
     args.patch_type = 'fix'
     args.feature_type = 'cnn_based'
-    args.image_show = True
+    args.image_show = False
     args.feature_save = True
     args.label_save = True
     return args
@@ -287,10 +287,11 @@ if __name__ == "__main__":
                                 feature = model(slide_patch)
                             features.append(feature)
                             info.append(clu_box + [1, int(file.split('_')[1].split('.')[0]), i])
-                    features = torch.cat(features).cpu().numpy()
-                    info = np.concatenate(info).reshape(len(info), -1)
-                    asset_dict = {'features': features, 'coords': info[:, :4], 'file': info[:, 4:]}
-                    save_hdf5(os.path.join(save_path, 'results.h5'), asset_dict, attr_dict= None, mode='w')
+                    if len(features) != 0:
+                        features = torch.cat(features).cpu().numpy()
+                        info = np.concatenate(info).reshape(len(info), -1)
+                        asset_dict = {'features': features, 'coords': info[:, :4], 'file': info[:, 4:]}
+                        save_hdf5(os.path.join(save_path, 'results.h5'), asset_dict, attr_dict= None, mode='a')
                     
                 elif args.feature_type == 'hand_crafted':
                     tc_w, tc_h = tc_bbox[2] - tc_bbox[0], tc_bbox[3] - tc_bbox[1]
