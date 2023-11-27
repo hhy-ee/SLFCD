@@ -14,11 +14,13 @@ from PIL import ImageDraw
 from skimage import measure
 from scipy import ndimage as nd
 from torchvision import transforms
-from utils import save_hdf5
+from sklearn.cluster import DBSCAN
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../../')
 
 from models.resnet_custom import resnet50_baseline
+
+from utils import save_hdf5
 
 from camelyon16.baseline.tumor_mask import generate_tumor_mask
 from camelyon16.cluster.utils import NMS, NMM
@@ -61,11 +63,11 @@ def parse_args():
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/train/tumor', 
-                              './datasets/train/prior_map_sampling_o0.5_l1',
-                              './datasets/train/patch_cluster_l1'])
+    args = parser.parse_args(['./datasets/test/images', 
+                              './datasets/test/prior_map_sampling_o0.25_l1',
+                              './datasets/test/patch_cluster_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = '1e0_1e3'
+    args.itc_threshold = '1e2_2e3'
     args.ini_patchsize = 256
     args.nms_threshold = 1.0
     args.nmm_threshold = 0.7
@@ -128,19 +130,31 @@ if __name__ == "__main__":
         
         # Computes the inference mask
         filled_image = nd.morphology.binary_fill_holes(POI)
-        evaluation_mask = measure.label(filled_image, connectivity=2)
+        dist_from_bg = nd.distance_transform_edt(filled_image, return_indices=False)
+        dist_from_fg = nd.distance_transform_edt(~filled_image, return_indices=False)
+        filled_mask = np.logical_or((dist_from_bg>=1), (dist_from_fg==1))
+        evaluation_mask = measure.label(filled_mask, connectivity=2)
         
-        # Eliminate abnormal tumor cells
+        # Split Isolated Tumor Cell (ITC)
+        normal_properties, anomaly_properties = [], []
+        anomaly_mask = np.zeros(filled_mask.shape) > 0
         properties = measure.regionprops(evaluation_mask)
-        filled_mask = np.zeros(filled_image.shape) > 0
         itc_threshold = tuple([float(t) for t in args.itc_threshold.split('_')])
         for i in range(len(properties)):
-            itc_size = properties[i].major_axis_length * 0.243 * pow(2, level_prior)
-            if itc_size > itc_threshold[0] and itc_size < itc_threshold[1]:
+            if properties[i].area > itc_threshold[0] and properties[i].area < itc_threshold[1]:
+                normal_properties.append(properties[i])
+            elif properties[i].area < itc_threshold[0]:
                 l, t, r, b = properties[i].bbox
-                filled_mask[l: r, t: b] = np.logical_or(filled_mask[l: r, t: b], properties[i].image_filled)
-                filtered_properties.append(properties[i])
+                anomaly_mask[l: r, t: b] = np.logical_or(anomaly_mask[l: r, t: b], properties[i].image_filled)
+                anomaly_properties.append(properties[i])
                 
+        anomaly_evaluation_mask = np.zeros(evaluation_mask.shape).astype(np.int32)
+        anomaly_coords = np.stack(np.where(anomaly_mask)).transpose((1,0))
+        hdb = DBSCAN(min_samples=100, eps=64).fit(anomaly_coords)
+        anomaly_evaluation_mask[np.where(anomaly_mask)]  = hdb.labels_ + 1
+        anomaly_properties = measure.regionprops(anomaly_evaluation_mask)
+        final_properties = normal_properties + anomaly_properties
+        
         if args.image_show:
             img_rgb = slide.read_region((0, 0), level_show, \
                         tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
@@ -152,8 +166,8 @@ if __name__ == "__main__":
             heat_img = cv2.addWeighted(prior_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
             img = Image.fromarray(heat_img).resize(prior_shape)
             img_draw = ImageDraw.ImageDraw(img)
-            for i in range(len(filtered_properties)):
-                l, t, r, b  = filtered_properties[i].bbox
+            for i in range(len(final_properties)):
+                l, t, r, b  = final_properties[i].bbox
                 img_draw.rectangle(((l, t), (r, b)), fill=None, outline='blue', width=1)
             heat_img_rect = np.asarray(img.resize(prior_shape))
             cv2.imwrite(os.path.join(save_path, file.split('.')[0] + '_ctc.png'), heat_img_rect)
@@ -168,7 +182,7 @@ if __name__ == "__main__":
             
             # plot 
             conf_map = np.zeros(filled_image.shape).astype(np.uint8)
-            for prop in filtered_properties:
+            for prop in final_properties:
                 region_confidence = prior_map[prop.coords[:,0], prop.coords[:,1]].mean()
                 conf_map[prop.coords[:,0], prop.coords[:,1]] = region_confidence
             img_rgb = slide.read_region((0, 0), level_show, \
@@ -179,33 +193,32 @@ if __name__ == "__main__":
             conf_map_rgb = cv2.cvtColor(conf_map_rgb, cv2.COLOR_BGR2RGB)
             heat_img = cv2.addWeighted(conf_map_rgb.transpose(1,0,2), 0.5, img_rgb.transpose(1,0,2), 0.5, 0)
             cv2.imwrite(os.path.join(save_path, file.split('.')[0] + '_conf.png'), heat_img)
+
+            anomaly_map = anomaly_evaluation_mask / anomaly_evaluation_mask.max() * 255
+            anomaly_map_rgb = cv2.applyColorMap(anomaly_map.astype(np.uint8), cv2.COLORMAP_JET)
+            anomaly_map_rgb = cv2.cvtColor(anomaly_map_rgb, cv2.COLOR_BGR2RGB)
+            img_rgb = slide.read_region((0, 0), level_show, \
+                            tuple([int(i/2**level_show) for i in slide.level_dimensions[0]])).convert('RGB')
+            anomaly_img = cv2.addWeighted(anomaly_map_rgb.transpose(1,0,2), 0.5, np.asarray(img_rgb), 0.5, 0)
+            cv2.imwrite(os.path.join(save_path, file.split('.')[0] + '_anomaly.png'), anomaly_img)
         
-        # Sample center point from specialized region of tumor cell
-        if not filled_mask.any():
-            pass
-        else:
-            dist_from_bg = nd.distance_transform_edt(filled_mask, return_indices=False)
-            dist_from_fg = nd.distance_transform_edt(~filled_mask, return_indices=False)
-            filtered_mask = np.logical_or((dist_from_bg>=1), (dist_from_fg==1))
-            
         # Generate patches from each tumor cell
         max_w, max_h = first_stage_map.shape
-        for i in tqdm(range(len(filtered_properties)), total=len(filtered_properties)):
+        for i in range(len(final_properties)):
             boxes_tumor = []
-            tc_X = filtered_properties[i].coords[:,0]
-            tc_Y = filtered_properties[i].coords[:,1]
+            tc_X = final_properties[i].coords[:,0]
+            tc_Y = final_properties[i].coords[:,1]
             for idx in range(len(tc_X)):
                 x_center, y_center = tc_X[idx], tc_Y[idx]
-                if filtered_mask[x_center, y_center]:
-                    patch_size = args.ini_patchsize // scale_out
-                    x_center = np.clip(x_center * scale_in, patch_size // 2, max_w - patch_size // 2)
-                    y_center = np.clip(y_center * scale_in, patch_size // 2, max_h - patch_size // 2)
-                    l, r = x_center - patch_size // 2, x_center + patch_size // 2
-                    t, b = y_center - patch_size // 2, y_center + patch_size // 2
-                    pos_idx = np.where(first_stage_map[l: r, t: b] / 255 > args.roi_threshold)
-                    scr = first_stage_map[l: r, t: b][pos_idx].mean() if len(pos_idx[0]) > 0 else 0
-                    l, t, r, b = l * scale_out, t * scale_out, r * scale_out, b  * scale_out
-                    boxes_tumor.append([l, t, r, b, scr])
+                patch_size = args.ini_patchsize // scale_out
+                x_center = np.clip(x_center * scale_in, patch_size // 2, max_w - patch_size // 2)
+                y_center = np.clip(y_center * scale_in, patch_size // 2, max_h - patch_size // 2)
+                l, r = x_center - patch_size // 2, x_center + patch_size // 2
+                t, b = y_center - patch_size // 2, y_center + patch_size // 2
+                pos_idx = np.where(first_stage_map[l: r, t: b] / 255 > args.roi_threshold)
+                scr = first_stage_map[l: r, t: b][pos_idx].mean() if len(pos_idx[0]) > 0 else 0
+                l, t, r, b = l * scale_out, t * scale_out, r * scale_out, b  * scale_out
+                boxes_tumor.append([l, t, r, b, scr])
 
             if args.patch_type == 'fix':
                 # fix patches
@@ -244,7 +257,7 @@ if __name__ == "__main__":
             
             if args.feature_save:
                 feature_map = cv2.resize(first_stage_map, (ext_shape[1], ext_shape[0]), interpolation=cv2.INTER_CUBIC) 
-                tc_bbox = [c * scale_feature for c in filtered_properties[i].bbox]
+                tc_bbox = [c * scale_feature for c in final_properties[i].bbox]
                 
                 if args.label_save:
                     if os.path.exists(os.path.join(os.path.dirname(args.wsi_path), \
@@ -264,7 +277,7 @@ if __name__ == "__main__":
                     model = model.to(device)
                     patch_transforms = transforms.Compose([transforms.ToTensor(),
                         transforms.Normalize(mean = (0.485, 0.456, 0.406), std = (0.229, 0.224, 0.225))])
-                    for j, cluster in enumerate(nmm_boxes_dict[1:]):
+                    for j, cluster in enumerate(nmm_boxes_dict):
                         clu_box = cluster['cluster']
                         slide_patch = slide.read_region((int(clu_box[0]* slide.level_downsamples[level_output]), \
                                                         int(clu_box[1]* slide.level_downsamples[level_output])), \
@@ -287,11 +300,10 @@ if __name__ == "__main__":
                                 feature = model(slide_patch)
                             features.append(feature)
                             info.append(clu_box + [1, int(file.split('_')[1].split('.')[0]), i])
-                    if len(features) != 0:
-                        features = torch.cat(features).cpu().numpy()
-                        info = np.concatenate(info).reshape(len(info), -1)
-                        asset_dict = {'features': features, 'coords': info[:, :4], 'file': info[:, 4:]}
-                        save_hdf5(os.path.join(save_path, 'results.h5'), asset_dict, attr_dict= None, mode='a')
+                    features = torch.cat(features).cpu().numpy()
+                    info = np.concatenate(info).reshape(len(info), -1)
+                    asset_dict = {'features': features, 'coords': info[:, :4], 'file': info[:, 4:]}
+                    save_hdf5(os.path.join(save_path, 'results.h5'), asset_dict, attr_dict= None, mode='a')
                     
                 elif args.feature_type == 'hand_crafted':
                     tc_w, tc_h = tc_bbox[2] - tc_bbox[0], tc_bbox[3] - tc_bbox[1]
