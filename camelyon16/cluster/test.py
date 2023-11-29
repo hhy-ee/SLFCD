@@ -101,9 +101,11 @@ if __name__ == "__main__":
         args.roi_threshold , args.itc_threshold, args.nms_threshold, args.nmm_threshold, args.patch_type, level_output))
     if not os.path.exists(save_path):
         os.mkdir(save_path)
-    if not os.path.exists(os.path.join(save_path, 'cluster_mask')):
-        os.mkdir(os.path.join(save_path, 'cluster_mask'))
-
+    if not os.path.exists(os.path.join(save_path, 'mask')):
+        os.mkdir(os.path.join(save_path, 'mask'))
+    if not os.path.exists(os.path.join(save_path, 'feature')):
+        os.mkdir(os.path.join(save_path, 'feature'))
+        
     if 'train' in args.wsi_path:
         dir = os.listdir(os.path.join(os.path.dirname(args.wsi_path), 'tumor_mask_l6'))
     elif 'test' in args.wsi_path:
@@ -267,7 +269,7 @@ if __name__ == "__main__":
                     else:
                         tumor_mask = generate_tumor_mask(file, args.wsi_path, level_output)
                     tc_mask = tumor_mask[tc_bbox[0]: tc_bbox[2], tc_bbox[1]: tc_bbox[3]]
-                    np.save(os.path.join(save_path, 'cluster_mask', '{}_tc_{}.npy'.\
+                    np.save(os.path.join(save_path, 'mask', '{}_tc_{}.npy'.\
                                             format(os.path.basename(file).split('.')[0], i)), tc_mask)
                 
                 # feature extraction
@@ -288,7 +290,7 @@ if __name__ == "__main__":
                         with torch.no_grad():	
                             feature = model(slide_patch)
                         features.append(feature)
-                        info.append(clu_box + [0, int(file.split('_')[1].split('.')[0]), i])
+                        info.append(clu_box + [i, 0])
                         for k, child in enumerate(cluster['child']):
                             chi_box = child['cluster']
                             slide_patch = slide.read_region((int(chi_box[0]* slide.level_downsamples[level_output]), \
@@ -299,11 +301,11 @@ if __name__ == "__main__":
                             with torch.no_grad():	
                                 feature = model(slide_patch)
                             features.append(feature)
-                            info.append(clu_box + [1, int(file.split('_')[1].split('.')[0]), i])
+                            info.append(clu_box + [i, 1])
                     features = torch.cat(features).cpu().numpy()
                     info = np.concatenate(info).reshape(len(info), -1)
                     asset_dict = {'features': features, 'coords': info[:, :4], 'file': info[:, 4:]}
-                    save_hdf5(os.path.join(save_path, 'results.h5'), asset_dict, attr_dict= None, mode='a')
+                    save_hdf5(os.path.join(save_path, 'mask', file.replace('npy', 'h5')), asset_dict, attr_dict= None, mode='a')
                     
                 elif args.feature_type == 'hand_crafted':
                     tc_w, tc_h = tc_bbox[2] - tc_bbox[0], tc_bbox[3] - tc_bbox[1]
