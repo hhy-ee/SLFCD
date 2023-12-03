@@ -63,11 +63,11 @@ def parse_args():
     parser.add_argument('--image_show', default=True, help='whether to visualization')
     parser.add_argument('--label_save', default=True, help='whether to visualization')
 
-    args = parser.parse_args(['./datasets/test/images', 
-                              './datasets/test/prior_map_sampling_o0.25_l1',
-                              './datasets/test/patch_cluster_l1'])
+    args = parser.parse_args(['./datasets/train/tumor', 
+                              './datasets/train/prior_map_sampling_o0.5_l1',
+                              './datasets/train/patch_cluster_l1'])
     args.roi_threshold = 0.1
-    args.itc_threshold = '1e2_2e3'
+    args.itc_threshold = '1e0_1e3'
     args.ini_patchsize = 256
     args.nms_threshold = 1.0
     args.nmm_threshold = 0.7
@@ -152,9 +152,10 @@ if __name__ == "__main__":
                 
         anomaly_evaluation_mask = np.zeros(evaluation_mask.shape).astype(np.int32)
         anomaly_coords = np.stack(np.where(anomaly_mask)).transpose((1,0))
-        hdb = DBSCAN(min_samples=100, eps=64).fit(anomaly_coords)
-        anomaly_evaluation_mask[np.where(anomaly_mask)]  = hdb.labels_ + 1
-        anomaly_properties = measure.regionprops(anomaly_evaluation_mask)
+        if len(anomaly_coords) != 0:
+            hdb = DBSCAN(min_samples=100, eps=64).fit(anomaly_coords)
+            anomaly_evaluation_mask[np.where(anomaly_mask)]  = hdb.labels_ + 1
+            anomaly_properties = measure.regionprops(anomaly_evaluation_mask)
         final_properties = normal_properties + anomaly_properties
         
         if args.image_show:
@@ -258,7 +259,6 @@ if __name__ == "__main__":
             total_boxes_nmm += nmm_boxes_dict
             
             if args.feature_save:
-                feature_map = cv2.resize(first_stage_map, (ext_shape[1], ext_shape[0]), interpolation=cv2.INTER_CUBIC) 
                 tc_bbox = [c * scale_feature for c in final_properties[i].bbox]
                 
                 if args.label_save:
@@ -275,10 +275,23 @@ if __name__ == "__main__":
                 # feature extraction
                 if args.feature_type == 'cnn_based':
                     features, info = [], []
+
                     model = resnet50_baseline(pretrained=True)
                     model = model.to(device)
                     patch_transforms = transforms.Compose([transforms.ToTensor(),
                         transforms.Normalize(mean = (0.485, 0.456, 0.406), std = (0.229, 0.224, 0.225))])
+
+                    tc_w, tc_h, tc_l, tc_t = tc_bbox[2] - tc_bbox[0], tc_bbox[3] - tc_bbox[1], tc_bbox[0], tc_bbox[1]
+                    slide_tc = slide.read_region((int(tc_l* slide.level_downsamples[level_output]), \
+                                                        int(tc_t* slide.level_downsamples[level_output])), \
+                                                        level_output, (tc_w, tc_h)).convert('RGB')
+                    slide_tc = slide_tc.resize((args.ini_patchsize, ) * 2)
+                    slide_tc = patch_transforms(slide_tc).unsqueeze(0)
+                    slide_tc = slide_tc.to(device, non_blocking=True)
+                    with torch.no_grad():	
+                        feature = model(slide_tc)
+                    features.append(feature)
+                    info.append([tc_l, tc_t, tc_w, tc_h] + [0])
                     for j, cluster in enumerate(nmm_boxes_dict):
                         clu_box = cluster['cluster']
                         slide_patch = slide.read_region((int(clu_box[0]* slide.level_downsamples[level_output]), \
@@ -290,7 +303,8 @@ if __name__ == "__main__":
                         with torch.no_grad():	
                             feature = model(slide_patch)
                         features.append(feature)
-                        info.append(clu_box + [i, 0])
+                        info.append(clu_box + [0])
+
                         for k, child in enumerate(cluster['child']):
                             chi_box = child['cluster']
                             slide_patch = slide.read_region((int(chi_box[0]* slide.level_downsamples[level_output]), \
@@ -301,13 +315,16 @@ if __name__ == "__main__":
                             with torch.no_grad():	
                                 feature = model(slide_patch)
                             features.append(feature)
-                            info.append(clu_box + [i, 1])
+                            info.append(chi_box + [1])
+
                     features = torch.cat(features).cpu().numpy()
                     info = np.concatenate(info).reshape(len(info), -1)
-                    asset_dict = {'features': features, 'coords': info[:, :4], 'file': info[:, 4:]}
-                    save_hdf5(os.path.join(save_path, 'mask', file.replace('npy', 'h5')), asset_dict, attr_dict= None, mode='a')
+                    asset_dict = {'features': features, 'info': info}
+                    save_hdf5(os.path.join(save_path, 'feature', '{}_tc_{}.h5'.\
+                            format(os.path.basename(file).split('.')[0], i)), asset_dict, attr_dict= None, mode='a')
                     
                 elif args.feature_type == 'hand_crafted':
+                    feature_map = cv2.resize(first_stage_map, (ext_shape[1], ext_shape[0]), interpolation=cv2.INTER_CUBIC) 
                     tc_w, tc_h = tc_bbox[2] - tc_bbox[0], tc_bbox[3] - tc_bbox[1]
                     tc_l = int(tc_bbox[0] * slide.level_downsamples[level_output])
                     tc_t = int(tc_bbox[1] * slide.level_downsamples[level_output])
